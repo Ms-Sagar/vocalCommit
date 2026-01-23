@@ -237,7 +237,7 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 async def process_voice_command(command_type: str, transcript: str) -> dict:
-    """Process voice commands through the agent system."""
+    \"\"\"Process voice commands through the agent system.\"\"\"
     # TODO: Implement agent orchestration logic
     return {
         "status": "processed",
@@ -282,14 +282,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 class PMAgent:
-    """Project Management Agent - Handles task planning and project coordination."""
+    \"\"\"Project Management Agent - Handles task planning and project coordination.\"\"\"
     
     def __init__(self):
         self.name = "PM Agent"
         self.role = "Project Manager"
     
     async def plan_task(self, transcript: str) -> Dict[str, Any]:
-        """
+        \"\"\"
         Analyze voice transcript and create a structured task plan.
         
         Args:
@@ -297,7 +297,7 @@ class PMAgent:
             
         Returns:
             Dict containing task breakdown, priorities, and dependencies
-        """
+        \"\"\"
         logger.info(f"PM Agent processing transcript: {transcript}")
         
         # TODO: Implement AI-powered task planning logic
@@ -326,7 +326,7 @@ class PMAgent:
         }
     
     async def update_task_status(self, task_id: str, status: str) -> Dict[str, Any]:
-        """Update task status and notify stakeholders."""
+        \"\"\"Update task status and notify stakeholders.\"\"\"
         logger.info(f"Updating task {task_id} status to {status}")
         
         return {
@@ -348,14 +348,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DevAgent:
-    """Development Agent - Handles code generation and implementation."""
+    \"\"\"Development Agent - Handles code generation and implementation.\"\"\"
     
     def __init__(self):
         self.name = "Dev Agent"
         self.role = "Software Developer"
     
     async def write_code(self, plan: Dict[str, Any], thought_signature: Optional[str] = None) -> Dict[str, Any]:
-        """
+        \"\"\"
         Generate code based on task plan and context from other agents.
         
         Args:
@@ -364,7 +364,7 @@ class DevAgent:
             
         Returns:
             Dict containing generated code, file structure, and implementation notes
-        """
+        \"\"\"
         logger.info(f"Dev Agent generating code for plan: {plan.get('task_id', 'unknown')}")
         
         # TODO: Implement AI-powered code generation
@@ -396,7 +396,7 @@ class DevAgent:
         }
     
     async def refactor_code(self, existing_code: str, requirements: str) -> Dict[str, Any]:
-        """Refactor existing code based on new requirements."""
+        \"\"\"Refactor existing code based on new requirements.\"\"\"
         logger.info("Dev Agent refactoring code")
         
         return {
@@ -420,21 +420,21 @@ import re
 logger = logging.getLogger(__name__)
 
 class SecurityAgent:
-    """Security Agent - Handles code security scanning and validation."""
+    \"\"\"Security Agent - Handles code security scanning and validation.\"\"\"
     
     def __init__(self):
         self.name = "Security Agent"
         self.role = "Security Specialist"
         self.vulnerability_patterns = [
-            r"eval\(",
-            r"exec\(",
+            r"eval\\(",
+            r"exec\\(",
             r"__import__",
-            r"input\(",
-            r"raw_input\(",
+            r"input\\(",
+            r"raw_input\\(",
         ]
     
     async def scan_code(self, code_content: str) -> Dict[str, Any]:
-        """
+        \"\"\"
         Scan code for security vulnerabilities and best practices.
         
         Args:
@@ -442,7 +442,7 @@ class SecurityAgent:
             
         Returns:
             Dict containing security findings, risk levels, and recommendations
-        """
+        \"\"\"
         logger.info("Security Agent scanning code for vulnerabilities")
         
         findings = []
@@ -463,9 +463,9 @@ class SecurityAgent:
         
         # Check for hardcoded secrets (basic patterns)
         secret_patterns = [
-            r"password\s*=\s*['\"][^'\"]+['\"]",
-            r"api_key\s*=\s*['\"][^'\"]+['\"]",
-            r"secret\s*=\s*['\"][^'\"]+['\"]"
+            r"password\\s*=\\s*['\"][^'\"]+['\"]",
+            r"api_key\\s*=\\s*['\"][^'\"]+['\"]",
+            r"secret\\s*=\\s*['\"][^'\"]+['\"]"
         ]
         
         for pattern in secret_patterns:
@@ -500,7 +500,7 @@ class SecurityAgent:
         }
     
     async def validate_dependencies(self, dependencies: List[str]) -> Dict[str, Any]:
-        """Validate project dependencies for known vulnerabilities."""
+        \"\"\"Validate project dependencies for known vulnerabilities.\"\"\"
         logger.info(f"Security Agent validating {len(dependencies)} dependencies")
         
         # TODO: Implement actual dependency vulnerability checking
@@ -527,14 +527,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DevOpsAgent:
-    """DevOps Agent - Handles deployment, infrastructure, and operations."""
+    \"\"\"DevOps Agent - Handles deployment, infrastructure, and operations.\"\"\"
     
     def __init__(self):
         self.name = "DevOps Agent"
         self.role = "DevOps Engineer"
     
     async def create_deployment_config(self, code_structure: Dict[str, Any]) -> Dict[str, Any]:
-        """
+        \"\"\"
         Create deployment configuration based on code structure.
         
         Args:
@@ -542,7 +542,7 @@ class DevOpsAgent:
             
         Returns:
             Dict containing deployment configs, infrastructure setup, and CI/CD pipeline
-        """
+        \"\"\"
         logger.info("DevOps Agent creating deployment configuration")
         
         # TODO: Implement intelligent deployment config generation
@@ -574,7 +574,7 @@ class DevOpsAgent:
         }
     
     def _generate_dockerfile(self, code_structure: Dict[str, Any]) -> str:
-        """Generate Dockerfile based on code structure."""
+        \"\"\"Generate Dockerfile based on code structure.\"\"\"
         return '''FROM python:3.11-slim
 
 WORKDIR /app
@@ -590,7 +590,7 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 '''
     
     def _generate_docker_compose(self) -> str:
-        """Generate docker-compose.yml."""
+        \"\"\"Generate docker-compose.yml.\"\"\"
         return '''version: '3.8'
 
 services:
@@ -617,7 +617,7 @@ volumes:
 '''
     
     def _generate_k8s_deployment(self) -> str:
-        """Generate Kubernetes deployment."""
+        \"\"\"Generate Kubernetes deployment.\"\"\"
         return '''apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -640,7 +640,7 @@ spec:
 '''
     
     def _generate_k8s_service(self) -> str:
-        """Generate Kubernetes service."""
+        \"\"\"Generate Kubernetes service.\"\"\"
         return '''apiVersion: v1
 kind: Service
 metadata:
@@ -655,7 +655,7 @@ spec:
 '''
     
     def _generate_github_actions(self) -> str:
-        """Generate GitHub Actions workflow."""
+        \"\"\"Generate GitHub Actions workflow.\"\"\"
         return '''name: CI/CD Pipeline
 
 on:
@@ -685,7 +685,7 @@ jobs:
 '''
 
     async def monitor_deployment(self, deployment_id: str) -> Dict[str, Any]:
-        """Monitor deployment health and performance."""
+        \"\"\"Monitor deployment health and performance.\"\"\"
         logger.info(f"DevOps Agent monitoring deployment: {deployment_id}")
         
         return {
@@ -716,7 +716,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def write_to_frontend(file_path: str, content: str, frontend_base: str = "../frontend") -> Dict[str, Any]:
-    """
+    \"\"\"
     Safely write files to the frontend folder.
     
     Args:
@@ -726,7 +726,7 @@ def write_to_frontend(file_path: str, content: str, frontend_base: str = "../fro
         
     Returns:
         Dict containing operation status and details
-    """
+    \"\"\"
     try:
         # Resolve and validate the target path
         frontend_path = Path(frontend_base).resolve()
@@ -760,7 +760,7 @@ def write_to_frontend(file_path: str, content: str, frontend_base: str = "../fro
         }
 
 def read_from_frontend(file_path: str, frontend_base: str = "../frontend") -> Dict[str, Any]:
-    """
+    \"\"\"
     Safely read files from the frontend folder.
     
     Args:
@@ -769,7 +769,7 @@ def read_from_frontend(file_path: str, frontend_base: str = "../frontend") -> Di
         
     Returns:
         Dict containing file content and metadata
-    """
+    \"\"\"
     try:
         frontend_path = Path(frontend_base).resolve()
         target_path = (frontend_path / file_path).resolve()
@@ -800,7 +800,7 @@ def read_from_frontend(file_path: str, frontend_base: str = "../frontend") -> Di
         }
 
 def create_project_structure(base_path: str, structure: Dict[str, Any]) -> Dict[str, Any]:
-    """
+    \"\"\"
     Create a project structure based on a nested dictionary.
     
     Args:
@@ -809,7 +809,7 @@ def create_project_structure(base_path: str, structure: Dict[str, Any]) -> Dict[
         
     Returns:
         Dict containing creation results
-    """
+    \"\"\"
     created_items = []
     errors = []
     
@@ -864,10 +864,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ThoughtSignature:
-    """
-    Represents context and insights passed between agents.
-    Enables agents to build upon each other's work and maintain context.
-    """
+    \"\"\"Represents context and insights passed between agents.\"\"\"
     
     def __init__(self, agent_name: str, task_id: str, content: Dict[str, Any]):
         self.agent_name = agent_name
@@ -877,7 +874,7 @@ class ThoughtSignature:
         self.signature_id = f"{agent_name}_{task_id}_{hash(str(content)) % 10000}"
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert thought signature to dictionary."""
+        \"\"\"Convert thought signature to dictionary.\"\"\"
         return {
             "signature_id": self.signature_id,
             "agent_name": self.agent_name,
@@ -887,12 +884,12 @@ class ThoughtSignature:
         }
     
     def to_json(self) -> str:
-        """Convert thought signature to JSON string."""
+        \"\"\"Convert thought signature to JSON string.\"\"\"
         return json.dumps(self.to_dict(), indent=2)
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'ThoughtSignature':
-        """Create ThoughtSignature from dictionary."""
+        \"\"\"Create ThoughtSignature from dictionary.\"\"\"
         signature = cls(
             agent_name=data["agent_name"],
             task_id=data["task_id"],
@@ -903,10 +900,7 @@ class ThoughtSignature:
         return signature
 
 class ThoughtChain:
-    """
-    Manages a chain of thought signatures for a task.
-    Tracks the flow of context between agents.
-    """
+    \"\"\"Manages a chain of thought signatures for a task.\"\"\"
     
     def __init__(self, task_id: str):
         self.task_id = task_id
@@ -914,7 +908,7 @@ class ThoughtChain:
         self.created_at = datetime.utcnow().isoformat()
     
     def add_signature(self, signature: ThoughtSignature):
-        """Add a thought signature to the chain."""
+        \"\"\"Add a thought signature to the chain.\"\"\"
         if signature.task_id != self.task_id:
             raise ValueError(f"Signature task_id {signature.task_id} doesn't match chain task_id {self.task_id}")
         
@@ -922,15 +916,7 @@ class ThoughtChain:
         logger.info(f"Added signature from {signature.agent_name} to chain {self.task_id}")
     
     def get_context_for_agent(self, agent_name: str) -> Dict[str, Any]:
-        """
-        Get relevant context for a specific agent.
-        
-        Args:
-            agent_name: Name of the agent requesting context
-            
-        Returns:
-            Dict containing relevant context from previous agents
-        """
+        \"\"\"Get relevant context for a specific agent.\"\"\"
         context = {
             "task_id": self.task_id,
             "requesting_agent": agent_name,
@@ -940,7 +926,7 @@ class ThoughtChain:
         }
         
         for signature in self.signatures:
-            if signature.agent_name != agent_name:  # Don't include own work
+            if signature.agent_name != agent_name:
                 context["previous_work"].append({
                     "agent": signature.agent_name,
                     "timestamp": signature.timestamp,
@@ -952,18 +938,18 @@ class ThoughtChain:
         return context
     
     def get_latest_signature(self) -> Optional[ThoughtSignature]:
-        """Get the most recent thought signature."""
+        \"\"\"Get the most recent thought signature.\"\"\"
         return self.signatures[-1] if self.signatures else None
     
     def get_signature_by_agent(self, agent_name: str) -> Optional[ThoughtSignature]:
-        """Get the most recent signature from a specific agent."""
+        \"\"\"Get the most recent signature from a specific agent.\"\"\"
         for signature in reversed(self.signatures):
             if signature.agent_name == agent_name:
                 return signature
         return None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert thought chain to dictionary."""
+        \"\"\"Convert thought chain to dictionary.\"\"\"
         return {
             "task_id": self.task_id,
             "created_at": self.created_at,
@@ -972,16 +958,13 @@ class ThoughtChain:
         }
 
 class ThoughtManager:
-    """
-    Global manager for thought signatures and chains.
-    Handles persistence and retrieval of agent context.
-    """
+    \"\"\"Global manager for thought signatures and chains.\"\"\"
     
     def __init__(self):
         self.chains: Dict[str, ThoughtChain] = {}
     
     def create_chain(self, task_id: str) -> ThoughtChain:
-        """Create a new thought chain for a task."""
+        \"\"\"Create a new thought chain for a task.\"\"\"
         if task_id in self.chains:
             logger.warning(f"Chain {task_id} already exists, returning existing chain")
             return self.chains[task_id]
@@ -992,21 +975,11 @@ class ThoughtManager:
         return chain
     
     def get_chain(self, task_id: str) -> Optional[ThoughtChain]:
-        """Get an existing thought chain."""
+        \"\"\"Get an existing thought chain.\"\"\"
         return self.chains.get(task_id)
     
     def add_thought(self, task_id: str, agent_name: str, content: Dict[str, Any]) -> ThoughtSignature:
-        """
-        Add a thought signature to a task chain.
-        
-        Args:
-            task_id: Task identifier
-            agent_name: Name of the agent adding the thought
-            content: Thought content and context
-            
-        Returns:
-            Created ThoughtSignature
-        """
+        \"\"\"Add a thought signature to a task chain.\"\"\"
         chain = self.get_chain(task_id)
         if not chain:
             chain = self.create_chain(task_id)
@@ -1017,7 +990,7 @@ class ThoughtManager:
         return signature
     
     def get_context_for_agent(self, task_id: str, agent_name: str) -> Dict[str, Any]:
-        """Get context for an agent working on a specific task."""
+        \"\"\"Get context for an agent working on a specific task.\"\"\"
         chain = self.get_chain(task_id)
         if not chain:
             return {
@@ -1033,19 +1006,12 @@ class ThoughtManager:
 thought_manager = ThoughtManager()
 
 def create_thought_signature(agent_name: str, task_id: str, content: Dict[str, Any]) -> str:
-    """
-    Convenience function to create and store a thought signature.
-    
-    Returns:
-        JSON string representation of the signature
-    """
+    \"\"\"Convenience function to create and store a thought signature.\"\"\"
     signature = thought_manager.add_thought(task_id, agent_name, content)
     return signature.to_json()
 
 def get_agent_context(task_id: str, agent_name: str) -> Dict[str, Any]:
-    """
-    Convenience function to get context for an agent.
-    """
+    \"\"\"Convenience function to get context for an agent.\"\"\"
     return thought_manager.get_context_for_agent(task_id, agent_name)
 """
     write_file(f"{utils_dir}/thought_signatures.py", thought_signatures_content)
@@ -1091,17 +1057,17 @@ Voice commands will be captured using the Web Speech API and sent to the backend
 """
     write_file(f"{frontend_dir}/README.md", frontend_readme_content)
     
-    print("\n" + "="*60)
+    print("\\n" + "="*60)
     print("🎉 VocalCommit project structure created successfully!")
     print("="*60)
-    print(f"\nProject root: {root_dir}")
-    print("\nNext steps:")
+    print(f"\\nProject root: {root_dir}")
+    print("\\nNext steps:")
     print("1. cd vocalCommit/orchestrator")
     print("2. pip install -r requirements.txt")
     print("3. Add your GEMINI_API_KEY to .env file")
     print("4. python -m uvicorn core.main:app --reload")
     print("5. cd ../frontend && npm create vite@latest .")
-    print("\nWebSocket endpoint: ws://localhost:8000/ws")
+    print("\\nWebSocket endpoint: ws://localhost:8000/ws")
     print("="*60)
 
 if __name__ == "__main__":
