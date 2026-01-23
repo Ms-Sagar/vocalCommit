@@ -305,3 +305,726 @@
     grid-template-columns: 1fr;
   }
 }
+/* Active Workflows Styles */
+.active-workflows {
+  background: #e3f2fd;
+  border: 2px solid #90caf9;
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 30px;
+}
+
+.active-workflows h3 {
+  margin-top: 0;
+  color: #1565c0;
+  font-size: 1.3rem;
+}
+
+.workflows-container {
+  display: grid;
+  gap: 20px;
+}
+
+.workflow-card {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  border: 1px solid #90caf9;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.workflow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.workflow-header h4 {
+  margin: 0;
+  color: #1565c0;
+  font-size: 1.2rem;
+  flex: 1;
+}
+
+.workflow-progress {
+  margin-bottom: 15px;
+}
+
+.progress-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.progress-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.progress-step.pending {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+}
+
+.progress-step.active {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  animation: pulse-step 2s infinite;
+}
+
+.progress-step.completed {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+}
+
+.progress-step.approved {
+  background: #d1ecf1;
+  border: 1px solid #bee5eb;
+}
+
+.progress-step.rejected {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+}
+
+.progress-step.current {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+@keyframes pulse-step {
+  0% { opacity: 1; }
+  50% { opacity: 0.8; }
+  100% { opacity: 1; }
+}
+
+.step-indicator {
+  font-size: 1.2rem;
+  min-width: 24px;
+  text-align: center;
+}
+
+.step-info {
+  flex: 1;
+}
+
+.step-name {
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+
+.step-agent {
+  color: #6c757d;
+  font-size: 0.8rem;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #e9ecef;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #007bff 0%, #28a745 100%);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.approval-feedback {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 10px 15px;
+  margin-top: 15px;
+  font-size: 0.9rem;
+  color: #495057;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.approval-feedback::before {
+  content: "ℹ️";
+  font-size: 1rem;
+}
+
+/* Disabled button styles for approval feedback */
+.approve-btn:disabled,
+.reject-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.approve-btn:disabled:hover,
+.reject-btn:disabled:hover {
+  transform: none;
+}
+
+/* Responsive workflow styles */
+@media (max-width: 768px) {
+  .progress-steps {
+    grid-template-columns: 1fr;
+  }
+  
+  .workflow-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .progress-step {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* Pending Approvals Styles */
+.pending-approvals {
+  background: #fff3cd;
+  border: 2px solid #ffeaa7;
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 30px;
+}
+
+.pending-approvals h3 {
+  margin-top: 0;
+  color: #856404;
+  font-size: 1.3rem;
+}
+
+.approvals-container {
+  display: grid;
+  gap: 15px;
+}
+
+.approval-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #ffeaa7;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.approval-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.approval-header h4 {
+  margin: 0;
+  color: #495057;
+  font-size: 1.1rem;
+  flex: 1;
+}
+
+.task-id {
+  background: #e9ecef;
+  color: #495057;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.approval-details {
+  margin-bottom: 15px;
+}
+
+.approval-details p {
+  margin: 5px 0;
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.approve-btn, .reject-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.approve-btn {
+  background-color: #28a745;
+  color: white;
+}
+
+.approve-btn:hover {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+.reject-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.reject-btn:hover {
+  background-color: #c82333;
+  transform: translateY(-1px);
+}
+
+/* Message Styles Updates */
+.message.pending-approval {
+  border-left-color: #ffc107;
+  background: #fff8e1;
+}
+
+.approval-required {
+  background-color: #ffc107;
+  color: #212529;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.message-status.pending_approval {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.message-status.completed {
+  background-color: #28a745;
+  color: white;
+}
+
+.message-status.rejected {
+  background-color: #dc3545;
+  color: white;
+}
+
+.task-id-display {
+  font-size: 0.8rem;
+  color: #6c757d;
+  font-family: 'Monaco', 'Menlo', monospace;
+  background: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-top: 8px;
+  display: inline-block;
+}
+
+/* Agent Status Updates */
+.agent-card.disabled {
+  opacity: 0.6;
+  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+}
+
+.agent-status-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(255,255,255,0.2);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.agent-card {
+  position: relative;
+}
+
+.agent-card.active .agent-status-badge {
+  background: rgba(40, 167, 69, 0.8);
+}
+
+.agent-card.disabled .agent-status-badge {
+  background: rgba(108, 117, 125, 0.8);
+}
+
+/* Footer Links */
+.footer-links {
+  margin-top: 40px;
+}
+
+.footer-links h3 {
+  color: #495057;
+  margin-bottom: 20px;
+  font-size: 1.3rem;
+}
+
+.links-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+.link-card {
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  padding: 20px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.3s ease;
+  display: block;
+}
+
+.link-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  text-decoration: none;
+  color: inherit;
+}
+
+.link-card h4 {
+  margin: 0 0 10px 0;
+  color: #007bff;
+  font-size: 1.1rem;
+}
+
+.link-card p {
+  margin: 0 0 10px 0;
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.link-card span {
+  color: #adb5bd;
+  font-size: 0.8rem;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* Responsive Updates */
+@media (max-width: 768px) {
+  .approval-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .approval-actions {
+    flex-direction: column;
+  }
+  
+  .approve-btn, .reject-btn {
+    width: 100%;
+  }
+  
+  .links-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* Task Actions Styles */
+.task-actions {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #e9ecef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.generate-files-btn {
+  background: linear-gradient(135deg, #17a2b8 0%, #20c997 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.generate-files-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(23, 162, 184, 0.3);
+}
+
+/* File Generator Message Styling */
+.message .agent-name:contains("File Generator") {
+  color: #17a2b8;
+}
+
+/* Responsive updates for task actions */
+@media (max-width: 768px) {
+  .task-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .generate-files-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Edit Button Styles */
+.edit-btn {
+  background-color: #17a2b8;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.edit-btn:hover {
+  background-color: #138496;
+  transform: translateY(-1px);
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.edit-workflow-modal {
+  max-width: 700px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 25px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #495057;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.close-btn:hover {
+  background: #f8f9fa;
+  color: #495057;
+}
+
+.modal-body {
+  padding: 25px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #495057;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.breakdown-list {
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 15px;
+  background: #f8f9fa;
+}
+
+.breakdown-item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.breakdown-item input {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.remove-step-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.remove-step-btn:hover {
+  background: #c82333;
+}
+
+.add-step-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.add-step-btn:hover {
+  background: #218838;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px 25px;
+  border-top: 1px solid #e9ecef;
+  background: #f8f9fa;
+  border-radius: 0 0 12px 12px;
+}
+
+.cancel-btn, .save-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.cancel-btn {
+  background: #6c757d;
+  color: white;
+}
+
+.cancel-btn:hover {
+  background: #545b62;
+}
+
+.save-btn {
+  background: #007bff;
+  color: white;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive modal styles */
+@media (max-width: 768px) {
+  .modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .modal-footer {
+    flex-direction: column;
+  }
+  
+  .cancel-btn, .save-btn {
+    width: 100%;
+  }
+  
+  .breakdown-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .remove-step-btn {
+    align-self: flex-end;
+    width: auto;
+    padding: 5px 10px;
+  }
+}

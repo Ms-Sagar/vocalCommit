@@ -1,0 +1,694 @@
+css
+/*
+  Color Palette Definitions (CSS Custom Properties)
+  These variables define the color schemes for light and dark modes.
+  They are applied to the :root element based on the data-theme attribute on the body.
+*/
+
+:root[data-theme='light'] {
+  --bg-color-primary: #f4f7f6; /* Light gray background */
+  --bg-color-secondary: #ffffff; /* White secondary background */
+  --text-color-primary: #333333; /* Dark gray text */
+  --text-color-secondary: #666666; /* Medium gray text */
+  --card-bg: #ffffff; /* White card background */
+  --border-color: #e0e0e0; /* Light gray border */
+  --button-bg-primary: #007bff; /* Blue primary button */
+  --button-text-primary: #ffffff; /* White button text */
+  --button-bg-secondary: #6c757d; /* Gray secondary button */
+  --button-text-secondary: #ffffff; /* White secondary button text */
+  --input-bg: #ffffff; /* White input background */
+  --input-border: #ced4da; /* Light gray input border */
+  --link-color: #007bff; /* Blue link color */
+  --modal-bg: #ffffff; /* White modal background */
+  --modal-overlay-bg: rgba(0, 0, 0, 0.5); /* Semi-transparent black overlay */
+  --header-bg: #ffffff; /* White header background */
+  --footer-bg: #f8f9fa; /* Light footer background */
+  --error-bg: #ffe0e6; /* Light red error background */
+  --error-text: #dc3545; /* Red error text */
+  --loading-text: #6c757d; /* Gray loading text */
+  --no-todos-text: #6c757d; /* Gray no todos text */
+  --active-button-bg: #0056b3; /* Darker blue for active/hover */
+  --hover-button-bg: #0069d9; /* Slightly darker blue for hover */
+  --close-btn-color: #000000; /* Black for close button */
+}
+
+:root[data-theme='dark'] {
+  --bg-color-primary: #1a1a2e; /* Deep indigo for primary background */
+  --bg-color-secondary: #21213e; /* Darker blue for secondary background */
+  --text-color-primary: #e0e0e0; /* Off-white for primary text */
+  --text-color-secondary: #aaaaaa; /* Light gray for secondary text */
+  --card-bg: #2b2b4d; /* Dark blue-purple for card background */
+  --border-color: #3f3f6e; /* Muted purple for borders */
+  --button-bg-primary: #5a67d8; /* Indigo for primary button */
+  --button-text-primary: #ffffff; /* White button text */
+  --button-bg-secondary: #6e7a9e; /* Muted blue-gray for secondary button */
+  --button-text-secondary: #ffffff; /* White secondary button text */
+  --input-bg: #3c3c6f; /* Darker blue-purple for input background */
+  --input-border: #5a5a8a; /* Muted purple for input border */
+  --link-color: #8da4ff; /* Lighter indigo for links */
+  --modal-bg: #2b2b4d; /* Dark blue-purple for modal background */
+  --modal-overlay-bg: rgba(0, 0, 0, 0.75); /* Darker semi-transparent overlay */
+  --header-bg: #2b2b4d; /* Dark blue-purple for header background */
+  --footer-bg: #1a1a2e; /* Deep indigo for footer background */
+  --error-bg: #4d2b2b; /* Dark red error background */
+  --error-text: #ff8a80; /* Light red error text */
+  --loading-text: #aaaaaa; /* Light gray loading text */
+  --no-todos-text: #aaaaaa; /* Light gray no todos text */
+  --active-button-bg: #4a54c1; /* Darker indigo for active/hover */
+  --hover-button-bg: #6a76e0; /* Slightly lighter indigo for hover */
+  --close-btn-color: #e0e0e0; /* Off-white for close button */
+}
+
+/* Global Styles */
+body {
+  font-family: 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  margin: 0;
+  padding: 0;
+  line-height: 1.6;
+  background-color: var(--bg-color-primary);
+  color: var(--text-color-primary);
+  transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition for theme change */
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--bg-color-primary); /* Ensure app background matches body */
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  background-color: var(--header-bg);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-color-primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+  gap: 1rem; /* Space between header content and actions */
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  color: var(--text-color-primary);
+}
+
+.header p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-color-secondary);
+}
+
+.header-content {
+  flex-grow: 1; /* Allows content to take available space */
+}
+
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+/* Theme Toggle Button */
+.theme-toggle-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 5px;
+  transition: background-color 0.2s ease;
+  color: var(--text-color-primary); /* Ensure icon color adapts */
+}
+
+.theme-toggle-btn:hover {
+  background-color: var(--border-color); /* Subtle hover effect */
+}
+
+
+/* Refresh Button */
+.refresh-btn {
+  background-color: var(--button-bg-secondary);
+  color: var(--button-text-secondary);
+  border: none;
+  padding: 0.75rem 1.25rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background-color: var(--active-button-bg);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:disabled {
+  background-color: var(--border-color);
+  color: var(--text-color-secondary);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Error Banner */
+.error-banner {
+  background-color: var(--error-bg);
+  color: var(--error-text);
+  border: 1px solid var(--error-text);
+  padding: 1rem 2rem;
+  margin: 1rem 2rem 0;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.error-banner p {
+  margin: 0;
+}
+
+.error-banner button {
+  background-color: var(--error-text);
+  color: var(--button-text-primary);
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.error-banner button:hover {
+  opacity: 0.8;
+}
+
+/* Stats Dashboard */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+}
+
+.stat-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.5rem;
+  text-align: center;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 2.2rem;
+  color: var(--text-color-primary);
+}
+
+.stat-card p {
+  margin: 0;
+  color: var(--text-color-secondary);
+  font-size: 1rem;
+}
+
+/* Controls (Filters and Add Todo Button) */
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 2rem 1.5rem;
+  flex-wrap: wrap; /* Allow wrapping */
+  gap: 1rem; /* Space between filter and add button */
+}
+
+.filters {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filters button {
+  background-color: var(--button-bg-secondary);
+  color: var(--button-text-secondary);
+  border: none;
+  padding: 0.75rem 1.25rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.filters button:hover:not(.active) {
+  background-color: var(--hover-button-bg);
+  transform: translateY(-1px);
+}
+
+.filters button.active {
+  background-color: var(--active-button-bg);
+  color: var(--button-text-primary);
+  font-weight: bold;
+}
+
+.add-todo-btn {
+  background-color: var(--button-bg-primary);
+  color: var(--button-text-primary);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.add-todo-btn:hover {
+  background-color: var(--hover-button-bg);
+  transform: translateY(-1px);
+}
+
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--modal-overlay-bg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal {
+  background-color: var(--modal-bg);
+  border-radius: 10px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 500px;
+  animation: slideIn 0.3s ease-out;
+  border: 1px solid var(--border-color);
+  color: var(--text-color-primary);
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.4rem;
+  color: var(--text-color-primary);
+}
+
+.modal-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: var(--close-btn-color);
+  padding: 0.25rem 0.5rem;
+  border-radius: 5px;
+  transition: background-color 0.2s ease;
+}
+
+.modal-header .close-btn:hover {
+  background-color: var(--border-color);
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: bold;
+  color: var(--text-color-secondary);
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: calc(100% - 20px); /* Adjust for padding */
+  padding: 10px;
+  border: 1px solid var(--input-border);
+  border-radius: 5px;
+  font-size: 1rem;
+  background-color: var(--input-bg);
+  color: var(--text-color-primary);
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  border-color: var(--button-bg-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.modal-footer .cancel-btn {
+  background-color: var(--button-bg-secondary);
+  color: var(--button-text-secondary);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s ease;
+}
+
+.modal-footer .cancel-btn:hover {
+  background-color: var(--hover-button-bg);
+}
+
+.modal-footer .add-btn {
+  background-color: var(--button-bg-primary);
+  color: var(--button-text-primary);
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  transition: background-color 0.2s ease;
+}
+
+.modal-footer .add-btn:hover:not(:disabled) {
+  background-color: var(--hover-button-bg);
+}
+
+.modal-footer .add-btn:disabled {
+  background-color: var(--border-color);
+  color: var(--text-color-secondary);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Animations for modal */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Todos Container */
+.todos-container {
+  flex-grow: 1; /* Allows todos container to fill available space */
+  padding: 0 2rem 2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.todo-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.todo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap; /* Allow wrapping of title/badges */
+  gap: 0.5rem;
+}
+
+.todo-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text-color-primary);
+  flex-grow: 1;
+  min-width: 0; /* Prevents overflow */
+}
+
+.todo-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0; /* Prevents badges from shrinking */
+}
+
+.status-badge, .priority-badge {
+  padding: 0.3em 0.6em;
+  border-radius: 5px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  color: white; /* Text color remains white for these specific badges */
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.todo-description {
+  color: var(--text-color-secondary);
+  margin-bottom: 1rem;
+  flex-grow: 1;
+}
+
+.todo-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto; /* Pushes actions to the bottom */
+  flex-wrap: wrap; /* Allow actions to wrap */
+  gap: 1rem; /* Space between status controls and delete button */
+}
+
+.status-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-controls label {
+  font-weight: bold;
+  color: var(--text-color-secondary);
+}
+
+.status-controls select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--input-border);
+  border-radius: 5px;
+  background-color: var(--input-bg);
+  color: var(--text-color-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.status-controls select:focus {
+  border-color: var(--button-bg-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+}
+
+.delete-btn {
+  background-color: #dc3545; /* Red delete button (kept specific for danger) */
+  color: white;
+  border: none;
+  padding: 0.7rem 1.2rem;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.delete-btn:hover {
+  background-color: #c82333;
+  transform: translateY(-1px);
+}
+
+/* Empty State / Loading State */
+.loading, .no-todos {
+  grid-column: 1 / -1; /* Span full width */
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--loading-text); /* Uses loading text color for consistency */
+  border: 1px dashed var(--border-color);
+  border-radius: 10px;
+  margin: 1rem 0;
+  transition: color 0.3s ease, border-color 0.3s ease;
+}
+
+.loading h3, .no-todos h3 {
+  margin-top: 0;
+  font-size: 1.5rem;
+  color: var(--text-color-primary);
+}
+
+.no-todos p {
+  color: var(--text-color-secondary);
+}
+
+.admin-link {
+  display: inline-block;
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--button-bg-primary);
+  color: var(--button-text-primary);
+  text-decoration: none;
+  border-radius: 5px;
+  font-weight: bold;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.admin-link:hover {
+  background-color: var(--hover-button-bg);
+  transform: translateY(-1px);
+}
+
+/* Footer */
+.footer {
+  margin-top: auto; /* Pushes footer to the bottom */
+  padding: 1.5rem 2rem;
+  background-color: var(--footer-bg);
+  border-top: 1px solid var(--border-color);
+  text-align: center;
+  color: var(--text-color-secondary);
+  font-size: 0.9rem;
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  flex-shrink: 0;
+}
+
+.footer p {
+  margin: 0.5rem 0;
+}
+
+.footer a {
+  color: var(--link-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .header, .controls, .error-banner {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .stats {
+    padding-left: 1rem;
+    padding-right: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+  }
+  .todos-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .header-content h1 {
+    font-size: 1.5rem;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end; /* Align buttons to the right */
+  }
+  .filters {
+    justify-content: center;
+    width: 100%;
+  }
+  .add-todo-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .modal {
+    width: 95%;
+  }
+  .modal-footer {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .modal-footer button {
+    width: 100%;
+  }
+  .todo-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .todo-badges {
+    margin-top: 0.5rem;
+  }
+  .todo-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .status-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .delete-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .header-content {
+    width: 100%;
+    margin-bottom: 1rem;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .stats {
+    grid-template-columns: 1fr 1fr; /* 2 columns on small phones */
+  }
+  .todos-container {
+    grid-template-columns: 1fr; /* Single column on very small screens */
+  }
+}

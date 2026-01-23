@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
 
 interface VoiceMessage {
   type: string;
@@ -13,14 +12,53 @@ interface AgentResponse {
   response: string;
   command_type?: string;
   transcript?: string;
+  task_id?: string;
+  requires_approval?: boolean;
+  next_agent?: string;
+  plan_details?: any;
+  code_files?: any;
+  dependencies?: string[];
+}
+
+interface PendingApproval {
+  task_id: string;
+  step: string;
+  transcript: string;
+  next_step: string;
+}
+
+interface WorkflowStep {
+  id: string;
+  name: string;
+  status: 'pending' | 'active' | 'completed' | 'approved' | 'rejected';
+  agent: string;
+  timestamp?: string;
+}
+
+interface TaskWorkflow {
+  task_id: string;
+  transcript: string;
+  steps: WorkflowStep[];
+  current_step: number;
 }
 
 const VoiceInterface: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [messages, setMessages] = useState<AgentResponse[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
+  const [activeWorkflows, setActiveWorkflows] = useState<TaskWorkflow[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
+  const [approvalFeedback, setApprovalFeedback] = useState<{[key: string]: string}>({});
+  const [editingWorkflow, setEditingWorkflow] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    transcript: '',
+    description: '',
+    priority: 'medium',
+    estimated_effort: '',
+    breakdown: [] as string[]
+  });
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -34,12 +72,30 @@ const VoiceInterface: React.FC = () => {
         setIsConnected(true);
         setConnectionStatus('Connected to VocalCommit Orchestrator');
         console.log('Connected to VocalCommit WebSocket');
+        fetchPendingApprovals();
       };
       
       ws.onmessage = (event) => {
         try {
           const response: AgentResponse = JSON.parse(event.data);
           setMessages(prev => [...prev, response]);
+          
+          // Update workflow tracking
+          updateWorkflowStatus(response);
+          
+          // If this is a pending approval, refresh the approvals list
+          if (response.requires_approval) {
+            fetchPendingApprovals();
+          }
+          
+          // Clear approval feedback after successful operations
+          if (response.status === 'completed' || response.status === 'rejected') {
+            setApprovalFeedback(prev => {
+              const updated = { ...prev };
+              delete updated[response.task_id || ''];
+              return updated;
+            });
+          }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
         }
@@ -113,6 +169,71 @@ const VoiceInterface: React.FC = () => {
     };
   }, []);
 
+  const fetchPendingApprovals = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/pending-approvals');
+      const data = await response.json();
+      setPendingApprovals(data.pending_approvals || []);
+    } catch (error) {
+      console.error('Error fetching pending approvals:', error);
+    }
+  };
+
+  const updateWorkflowStatus = (response: AgentResponse) => {
+    if (!response.task_id) return;
+
+    setActiveWorkflows(prev => {
+      const existing = prev.find(w => w.task_id === response.task_id);
+      
+      if (!existing) {
+        // Create new workflow
+        const newWorkflow: TaskWorkflow = {
+          task_id: response.task_id!,
+          transcript: response.transcript || 'Unknown task',
+          current_step: 0,
+          steps: [
+            { id: 'pm_analysis', name: 'PM Analysis', status: 'pending', agent: 'PM Agent' },
+            { id: 'pm_approval', name: 'PM Approval', status: 'pending', agent: 'Manual Review' },
+            { id: 'dev_implementation', name: 'Development', status: 'pending', agent: 'Dev Agent' },
+            { id: 'completion', name: 'Completion', status: 'pending', agent: 'System' }
+          ]
+        };
+
+        // Update based on response status
+        if (response.status === 'pending_approval') {
+          newWorkflow.steps[0].status = 'completed';
+          newWorkflow.steps[1].status = 'active';
+          newWorkflow.current_step = 1;
+        }
+
+        return [...prev, newWorkflow];
+      } else {
+        // Update existing workflow
+        return prev.map(workflow => {
+          if (workflow.task_id !== response.task_id) return workflow;
+
+          const updated = { ...workflow };
+          
+          if (response.status === 'pending_approval') {
+            updated.steps[0].status = 'completed';
+            updated.steps[1].status = 'active';
+            updated.current_step = 1;
+          } else if (response.status === 'completed') {
+            updated.steps[1].status = 'approved';
+            updated.steps[2].status = 'completed';
+            updated.steps[3].status = 'completed';
+            updated.current_step = 3;
+          } else if (response.status === 'rejected') {
+            updated.steps[1].status = 'rejected';
+            updated.current_step = 1;
+          }
+
+          return updated;
+        });
+      }
+    });
+  };
+
   const startListening = () => {
     if (recognitionRef.current && !isListening) {
       recognitionRef.current.start();
@@ -138,14 +259,297 @@ const VoiceInterface: React.FC = () => {
     }
   };
 
+  const handleApproval = async (taskId: string, action: 'approve' | 'reject') => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      // Show immediate feedback
+      setApprovalFeedback(prev => ({
+        ...prev,
+        [taskId]: action === 'approve' ? 'Processing approval...' : 'Processing rejection...'
+      }));
+
+      const message: VoiceMessage = {
+        type: 'approval',
+        transcript: `${action}_${taskId}`,
+        timestamp: new Date().toISOString()
+      };
+      
+      wsRef.current.send(JSON.stringify(message));
+      
+      // Update workflow status immediately
+      setActiveWorkflows(prev => prev.map(workflow => {
+        if (workflow.task_id !== taskId) return workflow;
+        
+        const updated = { ...workflow };
+        if (action === 'approve') {
+          updated.steps[1].status = 'approved';
+          updated.steps[2].status = 'active';
+          updated.current_step = 2;
+          setApprovalFeedback(prev => ({
+            ...prev,
+            [taskId]: '✅ Approved! Proceeding to development...'
+          }));
+        } else {
+          updated.steps[1].status = 'rejected';
+          setApprovalFeedback(prev => ({
+            ...prev,
+            [taskId]: '❌ Task rejected and removed from queue'
+          }));
+        }
+        return updated;
+      }));
+      
+      // Refresh approvals after a short delay
+      setTimeout(() => {
+        fetchPendingApprovals();
+        // Clear feedback after 3 seconds
+        setTimeout(() => {
+          setApprovalFeedback(prev => {
+            const updated = { ...prev };
+            delete updated[taskId];
+            return updated;
+          });
+        }, 3000);
+      }, 1000);
+    }
+  };
+
+  const generateFilesForTask = async (taskId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/generate-files/${taskId}`, {
+        method: 'POST'
+      });
+      const result = await response.json();
+      
+      if (result.status === 'success') {
+        setMessages(prev => [...prev, {
+          status: 'success',
+          agent: 'File Generator',
+          response: `✅ **Files Generated Successfully!**\n\n${result.message}\n\n**Generated Files:**\n${result.generated_files.map((f: any) => `• ${f.filename} (${f.size} bytes)`).join('\n')}`,
+          transcript: `Generate files for ${taskId}`
+        }]);
+      } else {
+        setMessages(prev => [...prev, {
+          status: 'error',
+          agent: 'File Generator',
+          response: `❌ **File Generation Failed**\n\n${result.error}`,
+          transcript: `Generate files for ${taskId}`
+        }]);
+      }
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        status: 'error',
+        agent: 'File Generator',
+        response: `❌ **File Generation Error**\n\n${error}`,
+        transcript: `Generate files for ${taskId}`
+      }]);
+    }
+  };
+
+  const startEditingWorkflow = async (taskId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/tasks/${taskId}`);
+      const workflow = await response.json();
+      
+      if (workflow.plan) {
+        setEditForm({
+          transcript: workflow.title || '',
+          description: workflow.plan.description || '',
+          priority: workflow.plan.priority || 'medium',
+          estimated_effort: workflow.plan.estimated_effort || '',
+          breakdown: workflow.plan.breakdown || []
+        });
+        setEditingWorkflow(taskId);
+      }
+    } catch (error) {
+      console.error('Error fetching workflow details:', error);
+    }
+  };
+
+  const saveWorkflowEdit = async () => {
+    if (!editingWorkflow) return;
+
+    try {
+      const response = await fetch(`http://localhost:8000/admin-workflows/${editingWorkflow}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          transcript: editForm.transcript,
+          plan: {
+            description: editForm.description,
+            priority: editForm.priority,
+            estimated_effort: editForm.estimated_effort,
+            breakdown: editForm.breakdown
+          }
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.status === 'success') {
+        setMessages(prev => [...prev, {
+          status: 'success',
+          agent: 'System',
+          response: `✅ **Workflow Updated Successfully!**\n\nTask "${editForm.transcript}" has been updated with your changes.`,
+          transcript: editForm.transcript
+        }]);
+        
+        // Refresh pending approvals
+        fetchPendingApprovals();
+        
+        // Close edit modal
+        setEditingWorkflow(null);
+      } else {
+        alert(`Error updating workflow: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`Error updating workflow: ${error}`);
+    }
+  };
+
+  const cancelWorkflowEdit = () => {
+    setEditingWorkflow(null);
+    setEditForm({
+      transcript: '',
+      description: '',
+      priority: 'medium',
+      estimated_effort: '',
+      breakdown: []
+    });
+  };
+
+  const addBreakdownStep = () => {
+    setEditForm(prev => ({
+      ...prev,
+      breakdown: [...prev.breakdown, '']
+    }));
+  };
+
+  const updateBreakdownStep = (index: number, value: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      breakdown: prev.breakdown.map((step, i) => i === index ? value : step)
+    }));
+  };
+
+  const removeBreakdownStep = (index: number) => {
+    setEditForm(prev => ({
+      ...prev,
+      breakdown: prev.breakdown.filter((_, i) => i !== index)
+    }));
+  };
+
   return (
     <div className="voice-interface">
       <div className="header">
-        <h1>🎤 VocalCommit - Voice Orchestrated SDLC</h1>
+        <h1>🎤 VocalCommit Admin - Voice Orchestrated SDLC</h1>
         <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
           {connectionStatus}
         </div>
       </div>
+
+      {/* Active Workflows Section */}
+      {activeWorkflows.length > 0 && (
+        <div className="active-workflows">
+          <h3>🔄 Active Workflows ({activeWorkflows.length})</h3>
+          <div className="workflows-container">
+            {activeWorkflows.map((workflow) => (
+              <div key={workflow.task_id} className="workflow-card">
+                <div className="workflow-header">
+                  <h4>{workflow.transcript}</h4>
+                  <span className="task-id">ID: {workflow.task_id}</span>
+                </div>
+                
+                <div className="workflow-progress">
+                  <div className="progress-steps">
+                    {workflow.steps.map((step, index) => (
+                      <div 
+                        key={step.id} 
+                        className={`progress-step ${step.status} ${index === workflow.current_step ? 'current' : ''}`}
+                      >
+                        <div className="step-indicator">
+                          {step.status === 'completed' && '✅'}
+                          {step.status === 'approved' && '✅'}
+                          {step.status === 'active' && '🔄'}
+                          {step.status === 'rejected' && '❌'}
+                          {step.status === 'pending' && '⏳'}
+                        </div>
+                        <div className="step-info">
+                          <div className="step-name">{step.name}</div>
+                          <div className="step-agent">{step.agent}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="progress-bar">
+                    <div 
+                      className="progress-fill" 
+                      style={{ width: `${(workflow.current_step / (workflow.steps.length - 1)) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+
+                {approvalFeedback[workflow.task_id] && (
+                  <div className="approval-feedback">
+                    {approvalFeedback[workflow.task_id]}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pending Approvals Section */}
+      {pendingApprovals.length > 0 && (
+        <div className="pending-approvals">
+          <h3>⏳ Pending Approvals ({pendingApprovals.length})</h3>
+          <div className="approvals-container">
+            {pendingApprovals.map((approval) => (
+              <div key={approval.task_id} className="approval-card">
+                <div className="approval-header">
+                  <h4>Task: {approval.transcript}</h4>
+                  <span className="task-id">ID: {approval.task_id}</span>
+                </div>
+                <div className="approval-details">
+                  <p><strong>Current Step:</strong> {approval.step.replace('_', ' ')}</p>
+                  <p><strong>Next Agent:</strong> {approval.next_step.replace('_', ' ')}</p>
+                </div>
+                <div className="approval-actions">
+                  <button 
+                    className="edit-btn"
+                    onClick={() => startEditingWorkflow(approval.task_id)}
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button 
+                    className="approve-btn"
+                    onClick={() => handleApproval(approval.task_id, 'approve')}
+                    disabled={!!approvalFeedback[approval.task_id]}
+                  >
+                    ✅ Approve
+                  </button>
+                  <button 
+                    className="reject-btn"
+                    onClick={() => handleApproval(approval.task_id, 'reject')}
+                    disabled={!!approvalFeedback[approval.task_id]}
+                  >
+                    ❌ Reject
+                  </button>
+                </div>
+                
+                {approvalFeedback[approval.task_id] && (
+                  <div className="approval-feedback">
+                    {approvalFeedback[approval.task_id]}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="voice-controls">
         <div className="transcript-section">
@@ -204,10 +608,13 @@ const VoiceInterface: React.FC = () => {
             </div>
           ) : (
             messages.map((message, index) => (
-              <div key={index} className="message">
+              <div key={index} className={`message ${message.requires_approval ? 'pending-approval' : ''}`}>
                 <div className="message-header">
                   <span className="agent-name">{message.agent || 'Orchestrator'}</span>
-                  <span className="message-status">{message.status}</span>
+                  <span className={`message-status ${message.status}`}>{message.status}</span>
+                  {message.requires_approval && (
+                    <span className="approval-required">⏳ Approval Required</span>
+                  )}
                 </div>
                 <div className="message-content">
                   {message.response}
@@ -215,6 +622,21 @@ const VoiceInterface: React.FC = () => {
                 {message.transcript && (
                   <div className="original-command">
                     Original: "{message.transcript}"
+                  </div>
+                )}
+                {message.task_id && (
+                  <div className="task-actions">
+                    <div className="task-id-display">
+                      Task ID: {message.task_id}
+                    </div>
+                    {message.status === 'completed' && (
+                      <button 
+                        className="generate-files-btn"
+                        onClick={() => generateFilesForTask(message.task_id!)}
+                      >
+                        📁 Generate Files to Frontend
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -226,24 +648,156 @@ const VoiceInterface: React.FC = () => {
       <div className="agent-status">
         <h3>Available Agents</h3>
         <div className="agents-grid">
-          <div className="agent-card">
+          <div className="agent-card active">
             <h4>🎯 PM Agent</h4>
             <p>Task planning and project coordination</p>
+            <span className="agent-status-badge">Active</span>
           </div>
-          <div className="agent-card">
+          <div className="agent-card active">
             <h4>💻 Dev Agent</h4>
             <p>AI-powered code generation</p>
+            <span className="agent-status-badge">Active</span>
           </div>
-          <div className="agent-card">
+          <div className="agent-card disabled">
             <h4>🔒 Security Agent</h4>
             <p>Code vulnerability scanning</p>
+            <span className="agent-status-badge">Disabled</span>
           </div>
-          <div className="agent-card">
+          <div className="agent-card disabled">
             <h4>🚀 DevOps Agent</h4>
             <p>Deployment and operations</p>
+            <span className="agent-status-badge">Disabled</span>
           </div>
         </div>
       </div>
+
+      <div className="footer-links">
+        <h3>System Links</h3>
+        <div className="links-grid">
+          <a href="http://localhost:5174" target="_blank" className="link-card">
+            <h4>📋 Todo UI</h4>
+            <p>View generated tasks and progress</p>
+            <span>localhost:5174</span>
+          </a>
+          <a href="http://localhost:8000/health" target="_blank" className="link-card">
+            <h4>🔧 API Health</h4>
+            <p>Check orchestrator status</p>
+            <span>localhost:8000/health</span>
+          </a>
+          <a href="http://localhost:8000/pending-approvals" target="_blank" className="link-card">
+            <h4>⏳ Pending Approvals</h4>
+            <p>View pending approvals JSON</p>
+            <span>localhost:8000/pending-approvals</span>
+          </a>
+        </div>
+      </div>
+
+      {/* Edit Workflow Modal */}
+      {editingWorkflow && (
+        <div className="modal-overlay">
+          <div className="modal edit-workflow-modal">
+            <div className="modal-header">
+              <h3>✏️ Edit Workflow</h3>
+              <button 
+                className="close-btn"
+                onClick={cancelWorkflowEdit}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Task Description *</label>
+                <input
+                  type="text"
+                  value={editForm.transcript}
+                  onChange={(e) => setEditForm({...editForm, transcript: e.target.value})}
+                  placeholder="Enter task description..."
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Detailed Description</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({...editForm, description: e.target.value})}
+                  placeholder="Enter detailed description..."
+                  rows={3}
+                />
+              </div>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Priority</label>
+                  <select
+                    value={editForm.priority}
+                    onChange={(e) => setEditForm({...editForm, priority: e.target.value})}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                
+                <div className="form-group">
+                  <label>Estimated Effort</label>
+                  <input
+                    type="text"
+                    value={editForm.estimated_effort}
+                    onChange={(e) => setEditForm({...editForm, estimated_effort: e.target.value})}
+                    placeholder="e.g., 2-4 hours, 1-2 days"
+                  />
+                </div>
+              </div>
+              
+              <div className="form-group">
+                <label>Implementation Steps</label>
+                <div className="breakdown-list">
+                  {editForm.breakdown.map((step, index) => (
+                    <div key={index} className="breakdown-item">
+                      <input
+                        type="text"
+                        value={step}
+                        onChange={(e) => updateBreakdownStep(index, e.target.value)}
+                        placeholder={`Step ${index + 1}...`}
+                      />
+                      <button 
+                        className="remove-step-btn"
+                        onClick={() => removeBreakdownStep(index)}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <button 
+                    className="add-step-btn"
+                    onClick={addBreakdownStep}
+                  >
+                    ➕ Add Step
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button 
+                className="cancel-btn"
+                onClick={cancelWorkflowEdit}
+              >
+                Cancel
+              </button>
+              <button 
+                className="save-btn"
+                onClick={saveWorkflowEdit}
+                disabled={!editForm.transcript.trim()}
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
