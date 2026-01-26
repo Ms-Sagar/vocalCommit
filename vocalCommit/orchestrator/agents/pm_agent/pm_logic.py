@@ -35,14 +35,20 @@ class PMAgent:
             genai.configure(api_key=settings.gemini_api_key)
             model = genai.GenerativeModel('models/gemini-2.5-flash')
             
-            # Create specialized prompt based on task type
+                # Create specialized prompt based on task type
             if is_ui_editing:
                 prompt = f"""
                 As a Senior UI/UX Designer and Frontend Developer, analyze this UI modification request for a React Todo application:
                 
                 Request: "{transcript}"
                 
-                Current Todo UI Features:
+                Current Todo UI Structure:
+                - src/App.tsx: Main React component with todo logic
+                - src/App.css: Styling for all UI components
+                - src/index.css: Global styles
+                - src/components/: Additional React components
+                
+                Current Features:
                 - Manual todo creation and management
                 - Status filtering (all, pending, in-progress, completed)
                 - Priority levels (low, medium, high)
@@ -52,15 +58,23 @@ class PMAgent:
                 - Statistics dashboard
                 
                 Please provide a structured response in JSON format with:
-                1. A clear description of the UI changes needed
-                2. Priority level (low/medium/high) 
-                3. Estimated effort (e.g., "30 minutes", "1-2 hours")
-                4. Detailed breakdown of UI modification steps (4-6 steps)
-                5. Specific React components/files that need modification
-                6. UI/UX considerations and best practices
+                {{
+                    "description": "Clear description of the UI changes needed",
+                    "priority": "low/medium/high",
+                    "estimated_effort": "e.g., 30 minutes, 1-2 hours",
+                    "breakdown": ["step1", "step2", "step3", "step4"],
+                    "target_files": ["list of files that need modification"],
+                    "dependencies": ["react", "css", etc],
+                    "ui_considerations": "accessibility, responsiveness, UX notes"
+                }}
                 
-                Focus on practical, actionable steps for modifying the existing React Todo UI.
-                Consider accessibility, responsiveness, and user experience.
+                IMPORTANT: For target_files, consider:
+                - If adding new UI elements or modifying layout: include both src/App.tsx AND src/App.css
+                - If adding dark mode/theming: include src/App.tsx, src/App.css, and potentially src/index.css
+                - If creating new components: include src/components/ComponentName.tsx and related CSS
+                - If modifying existing functionality: identify the specific files that need changes
+                
+                Focus on practical, actionable steps and identify ALL files that need modification.
                 """
             else:
                 prompt = f"""
@@ -104,7 +118,7 @@ class PMAgent:
                     "assigned_agents": ["dev_agent"],
                     "ai_insights": response.text[:500] + "..." if len(response.text) > 500 else response.text,
                     "is_ui_editing": is_ui_editing,
-                    "target_files": ai_response.get("target_files", ["src/App.tsx"] if is_ui_editing else [])
+                    "target_files": self._determine_target_files(ai_response.get("target_files", []), transcript, is_ui_editing)
                 }
                 
             except (json.JSONDecodeError, AttributeError) as e:
@@ -141,7 +155,7 @@ class PMAgent:
                 "assigned_agents": ["dev_agent"],
                 "ai_powered": False,
                 "is_ui_editing": True,
-                "target_files": ["src/App.tsx", "src/App.css"]
+                "target_files": self._determine_target_files([], transcript, is_ui_editing)
             }
         else:
             plan = {
@@ -180,7 +194,7 @@ class PMAgent:
             "assigned_agents": ["dev_agent"],
             "ai_insights": text[:300] + "..." if len(text) > 300 else text,
             "is_ui_editing": is_ui_editing,
-            "target_files": ["src/App.tsx"] if is_ui_editing else []
+            "target_files": self._determine_target_files([], transcript, is_ui_editing)
         }
     
     def _extract_steps(self, text: str, is_ui_editing: bool = False) -> list:
@@ -252,6 +266,68 @@ class PMAgent:
             dependencies.extend([match.lower() for match in matches])
         
         return list(set(dependencies))  # Remove duplicates
+    
+    def _determine_target_files(self, ai_suggested_files: list, transcript: str, is_ui_editing: bool = False) -> list:
+        """Intelligently determine which files need to be modified based on the request."""
+        if not is_ui_editing:
+            return ai_suggested_files or []
+        
+        # Start with AI suggestions if available
+        target_files = set(ai_suggested_files) if ai_suggested_files else set()
+        
+        # Analyze transcript for file requirements
+        transcript_lower = transcript.lower()
+        
+        # Always include App.tsx for UI changes
+        target_files.add("src/App.tsx")
+        
+        # Determine if CSS changes are needed
+        css_keywords = [
+            'style', 'styling', 'color', 'theme', 'dark mode', 'light mode',
+            'background', 'font', 'size', 'layout', 'design', 'appearance',
+            'css', 'responsive', 'mobile', 'desktop', 'button', 'modal',
+            'animation', 'transition', 'hover', 'focus', 'border', 'shadow'
+        ]
+        
+        if any(keyword in transcript_lower for keyword in css_keywords):
+            target_files.add("src/App.css")
+        
+        # Determine if global styles are needed
+        global_keywords = [
+            'global', 'entire app', 'whole application', 'site-wide',
+            'root', 'body', 'html', 'font family', 'base styles'
+        ]
+        
+        if any(keyword in transcript_lower for keyword in global_keywords):
+            target_files.add("src/index.css")
+        
+        # Determine if new components are needed
+        component_keywords = [
+            'new component', 'create component', 'add component',
+            'separate component', 'reusable component', 'component for'
+        ]
+        
+        if any(keyword in transcript_lower for keyword in component_keywords):
+            # For now, we'll stick to modifying existing files
+            # In the future, this could create new component files
+            pass
+        
+        # Specific feature-based file determination
+        if 'dark mode' in transcript_lower or 'theme' in transcript_lower:
+            target_files.update(["src/App.tsx", "src/App.css"])
+        
+        if 'modal' in transcript_lower or 'popup' in transcript_lower:
+            target_files.update(["src/App.tsx", "src/App.css"])
+        
+        if 'navigation' in transcript_lower or 'header' in transcript_lower or 'footer' in transcript_lower:
+            target_files.update(["src/App.tsx", "src/App.css"])
+        
+        # Convert back to list and ensure we have at least one file
+        result = list(target_files)
+        if not result and is_ui_editing:
+            result = ["src/App.tsx"]
+        
+        return result
     
     async def update_task_status(self, task_id: str, status: str) -> Dict[str, Any]:
         """Update task status and notify stakeholders."""

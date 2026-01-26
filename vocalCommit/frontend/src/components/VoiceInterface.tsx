@@ -18,6 +18,17 @@ interface AgentResponse {
   plan_details?: any;
   code_files?: any;
   dependencies?: string[];
+  modified_files?: string[];
+  ui_changes?: string[];
+  test_results?: {
+    status: string;
+    tests_run: string[];
+    overall_assessment: string;
+    syntax_validation?: any;
+    build_test?: any;
+    functional_validation?: any;
+    recommendations?: string[];
+  };
 }
 
 interface PendingApproval {
@@ -92,8 +103,8 @@ const VoiceInterface: React.FC = () => {
       'pm_agent': 'Project Manager Agent',
       'security_agent': 'Security Agent',
       'devops_agent': 'DevOps Agent',
-      'code_review_agent': 'Code Review Agent',
       'testing_agent': 'Testing Agent',
+      'code_review_agent': 'Code Review Agent',
       'completion': 'Task Completion',
       'manual_review': 'Manual Review',
       'final_review': 'Final Review'
@@ -234,6 +245,7 @@ const VoiceInterface: React.FC = () => {
             { id: 'pm_analysis', name: 'PM Analysis', status: 'pending', agent: 'PM Agent' },
             { id: 'pm_approval', name: 'PM Approval', status: 'pending', agent: 'Manual Review' },
             { id: 'dev_implementation', name: 'Development', status: 'pending', agent: 'Dev Agent' },
+            { id: 'testing', name: 'Testing & Validation', status: 'pending', agent: 'Testing Agent' },
             { id: 'completion', name: 'Completion', status: 'pending', agent: 'System' }
           ]
         };
@@ -265,12 +277,21 @@ const VoiceInterface: React.FC = () => {
               updated.current_step = 3;
             }
           } else if (response.status === 'completed') {
-            // Mark all steps as completed
+            // Mark all steps as completed, including testing
             updated.steps.forEach((step, index) => {
               if (index <= updated.current_step + 1) {
                 step.status = index === updated.current_step ? 'approved' : 'completed';
               }
             });
+            
+            // If we have test results, mark testing step as completed
+            if (response.test_results) {
+              const testingStepIndex = updated.steps.findIndex(s => s.id === 'testing');
+              if (testingStepIndex !== -1) {
+                updated.steps[testingStepIndex].status = 'completed';
+              }
+            }
+            
             updated.steps[updated.steps.length - 1].status = 'completed';
             updated.current_step = updated.steps.length - 1;
           } else if (response.status === 'rejected') {
@@ -742,6 +763,103 @@ const VoiceInterface: React.FC = () => {
                 <div className="message-content">
                   {message.response}
                 </div>
+                
+                {/* Testing Results Display */}
+                {message.test_results && (
+                  <div className="testing-results">
+                    <h4>🧪 Testing Results</h4>
+                    <div className="test-summary">
+                      <div className={`test-status ${message.test_results.status}`}>
+                        Status: {message.test_results.status.toUpperCase()}
+                      </div>
+                      <div className="test-assessment">
+                        {message.test_results.overall_assessment}
+                      </div>
+                    </div>
+                    
+                    {message.test_results.tests_run && message.test_results.tests_run.length > 0 && (
+                      <div className="tests-executed">
+                        <strong>Tests Executed:</strong>
+                        <div className="test-badges">
+                          {message.test_results.tests_run.map((test, idx) => (
+                            <span key={idx} className="test-badge">
+                              {test === 'syntax_validation' && '📝 Syntax'}
+                              {test === 'build_test' && '🔨 Build'}
+                              {test === 'functional_validation' && '⚙️ Functional'}
+                              {!['syntax_validation', 'build_test', 'functional_validation'].includes(test) && test}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Detailed Test Results */}
+                    <div className="detailed-test-results">
+                      {message.test_results.syntax_validation && (
+                        <div className="test-detail">
+                          <strong>📝 Syntax Validation:</strong>
+                          <span className={`result-status ${message.test_results.syntax_validation.status}`}>
+                            {message.test_results.syntax_validation.status}
+                          </span>
+                          {message.test_results.syntax_validation.files_tested && (
+                            <div className="files-tested">
+                              Tested: {message.test_results.syntax_validation.files_tested.join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {message.test_results.build_test && (
+                        <div className="test-detail">
+                          <strong>🔨 Build Test:</strong>
+                          <span className={`result-status ${message.test_results.build_test.status}`}>
+                            {message.test_results.build_test.status}
+                          </span>
+                          {message.test_results.build_test.message && (
+                            <div className="build-message">
+                              {message.test_results.build_test.message}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {message.test_results.functional_validation && (
+                        <div className="test-detail">
+                          <strong>⚙️ Functional Validation:</strong>
+                          <span className={`result-status ${message.test_results.functional_validation.status}`}>
+                            {message.test_results.functional_validation.status}
+                          </span>
+                          {message.test_results.functional_validation.ai_powered && (
+                            <span className="ai-badge">🤖 AI-Powered</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {message.test_results.recommendations && message.test_results.recommendations.length > 0 && (
+                      <div className="test-recommendations">
+                        <strong>💡 Recommendations:</strong>
+                        <ul>
+                          {message.test_results.recommendations.slice(0, 3).map((rec, idx) => (
+                            <li key={idx}>{rec}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Modified Files Display */}
+                {message.modified_files && message.modified_files.length > 0 && (
+                  <div className="modified-files">
+                    <strong>📁 Modified Files ({message.modified_files.length}):</strong>
+                    <div className="file-list">
+                      {message.modified_files.map((file, idx) => (
+                        <span key={idx} className="file-badge">{file}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {message.transcript && (
                   <div className="original-command">
                     Original: "{message.transcript}"
@@ -784,7 +902,12 @@ const VoiceInterface: React.FC = () => {
           </div>
           <div className="agent-card active">
             <h4>💻 Dev Agent</h4>
-            <p>AI-powered code generation</p>
+            <p>AI-powered code generation with multi-file coordination</p>
+            <span className="agent-status-badge">Active</span>
+          </div>
+          <div className="agent-card active">
+            <h4>🧪 Testing Agent</h4>
+            <p>Automated testing, validation & quality assurance</p>
             <span className="agent-status-badge">Active</span>
           </div>
           <div className="agent-card disabled">

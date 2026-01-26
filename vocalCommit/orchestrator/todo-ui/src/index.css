@@ -3,9 +3,12 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: #213547;
-  background-color: #ffffff;
+  color-scheme: light dark; /* Allows browser to render native UI elements in light/dark mode */
+
+  /* Global theme colors, using CSS variables defined in App.css */
+  /* Fallbacks provided for initial load or if variables are not yet defined */
+  color: var(--text-primary, #495057); /* Default text color, light mode */
+  background-color: var(--bg-app, #f8f9fa); /* Default app background, light mode */
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -22,7 +25,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #f8f9fa;
+  /* Use app background variable for consistency */
+  background-color: var(--bg-app, #f8f9fa); /* Default app background, light mode */
 }
 
 #root {
@@ -32,11 +36,13 @@ body {
 
 a {
   font-weight: 500;
-  color: #007bff;
+  /* Use primary color variable for links */
+  color: var(--color-primary, #007bff);
   text-decoration: inherit;
 }
 a:hover {
-  color: #0056b3;
+  /* Use primary hover color variable for links */
+  color: var(--color-primary-hover, #0056b3);
 }
 
 h1 {
@@ -52,17 +58,21 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #007bff;
-  color: white;
+  /* Use primary color variable for button background */
+  background-color: var(--color-primary, #007bff);
+  /* Use light text color for text on primary colored buttons */
+  color: var(--text-light, white);
   cursor: pointer;
   transition: all 0.25s ease;
 }
 button:hover {
-  background-color: #0056b3;
+  /* Use primary hover color variable for button background hover */
+  background-color: var(--color-primary-hover, #0056b3);
 }
 button:focus,
 button:focus-visible {
-  outline: 2px solid #007bff;
+  /* Use primary color variable for button outline focus */
+  outline: 2px solid var(--color-primary, #007bff);
   outline-offset: 2px;
 }
 button:disabled {
@@ -70,22 +80,38 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Dark theme overrides */
-[data-theme="dark"] {
-  color: #e9ecef;
-  background-color: #1a1a1a;
+/* Styling for the theme toggle button */
+.theme-toggle-button {
+  /* Override default button styles for a more subtle, icon-based button */
+  border: none;
+  background-color: transparent; /* Transparent background by default */
+  color: var(--text-primary); /* Icon color based on primary text */
+  padding: 0.5em; /* Smaller padding suitable for icons */
+  width: 44px; /* Ensure sufficient touch target size */
+  height: 44px;
+  border-radius: 50%; /* Circular shape */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2em; /* Base size for icon, adjust as needed */
+  transition: background-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
 }
 
-[data-theme="dark"] body {
-  background-color: #1a1a1a;
+.theme-toggle-button:hover {
+  background-color: var(--bg-light-hover, rgba(0, 0, 0, 0.05)); /* Subtle hover effect */
+  color: var(--color-primary); /* Highlight icon on hover */
+  transform: scale(1.05); /* Slightly enlarge on hover */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #e9ecef;
-    background-color: #1a1a1a;
-  }
-  body {
-    background-color: #1a1a1a;
-  }
+.theme-toggle-button:focus,
+.theme-toggle-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  background-color: var(--bg-light-hover, rgba(0, 0, 0, 0.05)); /* Keep hover background on focus */
+  transform: scale(1.05); /* Keep enlarged on focus */
 }
+
+/* Removed specific dark theme overrides for :root and body that were here previously. */
+/* These are now handled by the CSS variables defined in src/App.css */
+/* which will be conditionally applied based on the data-theme attribute on the root HTML element */
+/* or by the user's system preference (prefers-color-scheme) if no explicit theme is set. */

@@ -1,500 +1,250 @@
-from typing import Dict, Any, Optional
-import logging
+import google.generativeai as genai
+from core.config import settings
 
-logger = logging.getLogger(__name__)
+# Configure Gemini API
+genai.configure(api_key=settings.gemini_api_key)
+client = genai.GenerativeModel('models/gemini-2.5-flash')
 
-class DevAgent:
-    """Development Agent - Handles code generation and implementation."""
+def run_dev_agent(target_filename, user_instruction, related_files=None, file_context=None):
+    """
+    The Dev Agent: "The Surgeon"
     
-    def __init__(self):
-        self.name = "Dev Agent"
-        self.role = "Software Developer"
+    This function implements the "Need-to-Know" architecture with multi-file awareness:
+    1. Reads the target file and related files for context
+    2. Sends contextual information to Gemini for better coordination
+    3. Overwrites the file with the complete rewritten version
     
-    async def write_code(self, plan: Dict[str, Any], thought_signature: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Generate code based on task plan using Gemini AI.
+    Args:
+        target_filename: The specific file to modify (e.g., "App.css")
+        user_instruction: What the user wants done (e.g., "Make the button blue")
+        related_files: List of other files being modified in this task
+        file_context: Dict of related file contents for context
+    
+    Returns:
+        Success message or error
+    """
+    import os
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    try:
+        # 1. READ ONLY THE TARGET FILE
+        # We do NOT load the whole repo.
+        # Get the current working directory and construct the path properly
+        current_dir = os.getcwd()
+        logger.info(f"Current working directory: {current_dir}")
         
-        Args:
-            plan: Task plan from PM Agent
-            thought_signature: Context and insights from previous agent interactions
+        # If we're in the orchestrator directory, the path is correct
+        # If we're in the parent directory, we need to adjust
+        # Handle case where target_filename already includes src/ prefix
+        if target_filename.startswith('src/'):
+            # Remove src/ prefix since we'll add it in the path construction
+            clean_filename = target_filename[4:]  # Remove 'src/' prefix
+        else:
+            clean_filename = target_filename
             
-        Returns:
-            Dict containing generated code, file structure, and implementation notes
-        """
-        logger.info(f"Dev Agent generating code with Gemini AI for plan: {plan.get('task_id', 'unknown')}")
+        if current_dir.endswith('orchestrator'):
+            file_path = f"todo-ui/src/{clean_filename}"
+        else:
+            file_path = f"vocalCommit/orchestrator/todo-ui/src/{clean_filename}"
+        
+        logger.info(f"Attempting to read file: {file_path}")
+        logger.info(f"Full path: {os.path.abspath(file_path)}")
         
         try:
-            import google.generativeai as genai
-            from core.config import settings
+            with open(file_path, "r") as f:
+                current_code = f.read()
+            logger.info(f"Successfully read {len(current_code)} characters from {target_filename}")
+        except FileNotFoundError as e:
+            error_msg = f"Error: File not found at {file_path}"
+            logger.error(error_msg)
+            return error_msg
+        
+        # 2. CONSTRUCT THE ENHANCED PROMPT WITH CONTEXT
+        file_type = "CSS" if target_filename.endswith('.css') else "React/TypeScript"
+        
+        # Build context information
+        context_info = ""
+        if related_files and len(related_files) > 1:
+            context_info = f"\n\nCONTEXT: This is part of a multi-file modification task. Other files being modified: {', '.join([f for f in related_files if f != target_filename])}"
             
-            # Configure Gemini API
-            if not settings.gemini_api_key:
-                logger.warning("No Gemini API key found, using fallback code generation")
-                return self._fallback_code_generation(plan)
-            
-            genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel('models/gemini-2.5-flash')
-            
-            # Create detailed prompt for code generation
-            prompt = f"""
-            As a Senior Software Developer, generate production-ready code for this task:
-            
-            Task: {plan.get('description', 'Unknown task')}
-            Priority: {plan.get('priority', 'medium')}
-            Breakdown: {', '.join(plan.get('breakdown', []))}
-            Dependencies: {', '.join(plan.get('dependencies', []))}
-            
-            Please generate:
-            1. Complete, functional code files (main implementation + utilities)
-            2. Proper error handling and logging
-            3. Clear documentation and comments
-            4. Appropriate file structure
-            5. List of required dependencies
-            6. Implementation notes explaining key decisions
-            
-            Focus on:
-            - Clean, maintainable code
-            - Best practices and patterns
-            - Security considerations
-            - Performance optimization
-            
-            Provide the response with clear file separations and explanations.
-            """
-            
-            response = model.generate_content(prompt)
-            
-            # Parse the AI response to extract code files
-            code_output = self._parse_code_response(response.text, plan)
-            
-            return {
-                "status": "success",
-                "agent": self.name,
-                "task_id": plan.get("task_id"),
-                "code_output": code_output,
-                "thought_signature": thought_signature,
-                "ai_powered": True
-            }
-            
+            if file_context:
+                context_info += "\n\nRELATED FILE CONTENTS:"
+                for rel_file, content in file_context.items():
+                    if rel_file != target_filename and content:
+                        # Limit context to avoid token limits
+                        preview = content[:500] + "..." if len(content) > 500 else content
+                        context_info += f"\n\n{rel_file}:\n```\n{preview}\n```"
+        
+        prompt = f"""You are a {file_type} Developer working on a React Todo application.
+
+The user wants: "{user_instruction}"
+
+Current file: `{target_filename}`
+```{file_type.lower()}
+{current_code}
+```{context_info}
+
+CRITICAL INSTRUCTIONS:
+1. Rewrite the ENTIRE file with the requested changes applied
+2. Maintain all existing functionality while adding the new features
+3. If this is a CSS file, ensure proper theming and responsive design
+4. If this is a React file, maintain TypeScript types and component structure
+5. Consider how this file works with the other files in the project
+6. OUTPUT ONLY THE RAW CODE - NO MARKDOWN BLOCKS, NO EXPLANATIONS, NO ```
+7. DO NOT wrap your response in markdown code blocks (```)
+8. Start directly with the code content
+
+Rewrite the complete file (raw code only):"""
+        
+        logger.info(f"Calling Gemini with enhanced prompt for {target_filename}")
+        
+        # 3. CALL GEMINI (Fast & Cheap because context is small)
+        try:
+            response = client.generate_content(prompt)
         except Exception as e:
-            logger.error(f"Error calling Gemini API for code generation: {str(e)}")
-            return self._fallback_code_generation(plan, thought_signature)
+            error_msg = f"Error calling Gemini API for {target_filename}: {str(e)}"
+            logger.error(error_msg)
+            return error_msg
+        
+        if not response or not response.text:
+            error_msg = f"Error: Gemini returned empty response for {target_filename}"
+            logger.error(error_msg)
+            return error_msg
+        
+        logger.info(f"Gemini returned {len(response.text)} characters")
+        
+        # 4. OVERWRITE THE FILE (The "Replace" Strategy)
+        new_code = response.text
+        with open(file_path, "w") as f:
+            f.write(new_code)
+        
+        logger.info(f"Successfully wrote {len(new_code)} characters to {target_filename}")
+        return f"Updated {target_filename} successfully."
+        
+    except Exception as e:
+        error_msg = f"Error in run_dev_agent for {target_filename}: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
+
+def process_ui_editing_plan(plan, user_instruction):
+    """
+    Process a UI editing plan from the PM Agent with multi-file coordination.
     
-    def _fallback_code_generation(self, plan: Dict[str, Any], thought_signature: Optional[str] = None) -> Dict[str, Any]:
-        """Fallback code generation when Gemini API is not available."""
-        task_desc = plan.get('description', 'Unknown task')
-        
-        # Generate more contextual placeholder code
-        main_code = f'''"""
-{task_desc}
-Generated by VocalCommit Dev Agent
-"""
-
-def main():
-    """Main entry point for {task_desc.lower()}"""
-    print("Starting {task_desc.lower()}...")
+    Args:
+        plan: Task plan from PM Agent containing target_files
+        user_instruction: Original user instruction
     
-    # TODO: Implement core functionality
-    # Based on plan: {', '.join(plan.get('breakdown', [])[:3])}
+    Returns:
+        Dict with status and results
+    """
+    import logging
+    import os
     
-    return "Task completed successfully"
-
-if __name__ == "__main__":
-    result = main()
-    print(result)
-'''
-        
-        utils_code = f'''"""
-Utility functions for {task_desc}
-"""
-
-def validate_input(data):
-    """Validate input data"""
-    if not data:
-        raise ValueError("Input data cannot be empty")
-    return True
-
-def format_response(data):
-    """Format response data"""
-    return {{
-        "status": "success",
-        "data": data,
-        "timestamp": "2024-01-23T00:00:00Z"
-    }}
-
-def handle_error(error):
-    """Handle and log errors"""
-    print(f"Error occurred: {{error}}")
-    return {{"status": "error", "message": str(error)}}
-'''
-        
-        code_output = {
-            "files": {
-                "main.py": main_code,
-                "utils.py": utils_code
-            },
-            "structure": {
-                "directories": ["src", "tests", "docs"],
-                "entry_point": "main.py"
-            },
-            "dependencies": self._infer_dependencies(task_desc),
-            "implementation_notes": [
-                f"Generated code structure for: {task_desc}",
-                "Added basic error handling and validation",
-                "Included utility functions for common operations",
-                "Ready for further development and testing"
-            ]
-        }
-        
+    logger = logging.getLogger(__name__)
+    
+    target_files = plan.get("target_files", ["App.tsx"])
+    modified_files = []
+    errors = []
+    
+    logger.info(f"Processing UI editing plan with multi-file coordination")
+    logger.info(f"User instruction: {user_instruction}")
+    logger.info(f"Target files: {target_files}")
+    logger.info(f"Full plan: {plan}")
+    
+    # 1. GATHER CONTEXT FROM ALL TARGET FILES
+    file_context = {}
+    current_dir = os.getcwd()
+    
+    for target_file in target_files:
+        try:
+            # Handle file path construction
+            if target_file.startswith('src/'):
+                clean_filename = target_file[4:]
+            else:
+                clean_filename = target_file
+                
+            if current_dir.endswith('orchestrator'):
+                file_path = f"todo-ui/src/{clean_filename}"
+            else:
+                file_path = f"vocalCommit/orchestrator/todo-ui/src/{clean_filename}"
+            
+            try:
+                with open(file_path, "r") as f:
+                    file_context[target_file] = f.read()
+                logger.info(f"Loaded context for {target_file}: {len(file_context[target_file])} characters")
+            except FileNotFoundError:
+                logger.warning(f"Could not load context for {target_file}: file not found")
+                file_context[target_file] = None
+        except Exception as e:
+            logger.warning(f"Error loading context for {target_file}: {str(e)}")
+            file_context[target_file] = None
+    
+    # 2. PROCESS FILES IN OPTIMAL ORDER
+    # Process CSS files first, then React files to ensure styling is available
+    css_files = [f for f in target_files if f.endswith('.css')]
+    react_files = [f for f in target_files if not f.endswith('.css')]
+    ordered_files = css_files + react_files
+    
+    logger.info(f"Processing files in order: {ordered_files}")
+    
+    for target_file in ordered_files:
+        try:
+            logger.info(f"Processing target file: {target_file}")
+            result = run_dev_agent(
+                target_file, 
+                user_instruction, 
+                related_files=target_files,
+                file_context=file_context
+            )
+            logger.info(f"Result for {target_file}: {result}")
+            
+            if "successfully" in result:
+                modified_files.append(target_file)
+                # Update file context with the new content for subsequent files
+                try:
+                    if target_file.startswith('src/'):
+                        clean_filename = target_file[4:]
+                    else:
+                        clean_filename = target_file
+                        
+                    if current_dir.endswith('orchestrator'):
+                        file_path = f"todo-ui/src/{clean_filename}"
+                    else:
+                        file_path = f"vocalCommit/orchestrator/todo-ui/src/{clean_filename}"
+                    
+                    with open(file_path, "r") as f:
+                        file_context[target_file] = f.read()
+                    logger.info(f"Updated context for {target_file} after modification")
+                except Exception as e:
+                    logger.warning(f"Could not update context for {target_file}: {str(e)}")
+            else:
+                errors.append(f"{target_file}: {result}")
+        except Exception as e:
+            error_msg = f"{target_file}: {str(e)}"
+            logger.error(f"Exception for {target_file}: {str(e)}")
+            errors.append(error_msg)
+    
+    logger.info(f"Modified files: {modified_files}")
+    logger.info(f"Errors: {errors}")
+    
+    if modified_files and not errors:
         return {
             "status": "success",
-            "agent": self.name,
-            "task_id": plan.get("task_id"),
-            "code_output": code_output,
-            "thought_signature": thought_signature,
-            "ai_powered": False
-        }
-    
-    def _parse_code_response(self, response_text: str, plan: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse Gemini AI response to extract code files and metadata."""
-        import re
-        
-        files = {}
-        dependencies = []
-        implementation_notes = []
-        
-        # Try to extract code blocks
-        code_blocks = re.findall(r'```(?:python|py)?\n(.*?)\n```', response_text, re.DOTALL)
-        
-        if code_blocks:
-            # If we have code blocks, try to identify files
-            for i, code in enumerate(code_blocks):
-                if i == 0:
-                    files["main.py"] = code.strip()
-                elif i == 1:
-                    files["utils.py"] = code.strip()
-                else:
-                    files[f"module_{i}.py"] = code.strip()
-        else:
-            # Fallback: use the entire response as main.py
-            files["main.py"] = f'"""\n{plan.get("description", "Generated code")}\n"""\n\n' + response_text[:1000]
-        
-        # Extract dependencies mentioned in the response
-        dep_patterns = [
-            r'import\s+(\w+)',
-            r'from\s+(\w+)',
-            r'pip\s+install\s+(\w+)',
-            r'requirements?.*?(\w+)'
-        ]
-        
-        for pattern in dep_patterns:
-            matches = re.findall(pattern, response_text, re.IGNORECASE)
-            dependencies.extend(matches)
-        
-        # Add inferred dependencies based on task
-        dependencies.extend(self._infer_dependencies(plan.get('description', '')))
-        
-        # Remove duplicates and common built-ins
-        builtin_modules = {'os', 'sys', 'json', 'time', 'datetime', 're', 'math', 'random'}
-        dependencies = list(set(dep for dep in dependencies if dep not in builtin_modules))
-        
-        # Extract implementation notes
-        note_patterns = [
-            r'(?:Note|Important|Key|Feature):\s*(.+)',
-            r'(?:Implementation|Design)\s+(?:note|decision):\s*(.+)',
-        ]
-        
-        for pattern in note_patterns:
-            matches = re.findall(pattern, response_text, re.IGNORECASE)
-            implementation_notes.extend(matches)
-        
-        if not implementation_notes:
-            implementation_notes = [
-                "AI-generated code with best practices",
-                "Includes error handling and documentation",
-                "Ready for testing and deployment"
-            ]
-        
-        return {
-            "files": files,
-            "structure": {
-                "directories": ["src", "tests", "docs"],
-                "entry_point": "main.py"
-            },
-            "dependencies": dependencies[:10],  # Limit to 10 dependencies
-            "implementation_notes": implementation_notes[:5]  # Limit to 5 notes
-        }
-    
-    def _infer_dependencies(self, description: str) -> list:
-        """Infer likely dependencies based on task description."""
-        deps = []
-        desc_lower = description.lower()
-        
-        # Web frameworks
-        if any(word in desc_lower for word in ['api', 'web', 'server', 'endpoint']):
-            deps.extend(['fastapi', 'uvicorn'])
-        
-        # Database
-        if any(word in desc_lower for word in ['database', 'db', 'data', 'store']):
-            deps.extend(['sqlalchemy', 'psycopg2'])
-        
-        # Frontend
-        if any(word in desc_lower for word in ['react', 'frontend', 'ui', 'interface']):
-            deps.extend(['react', 'typescript'])
-        
-        # Data processing
-        if any(word in desc_lower for word in ['data', 'analysis', 'process']):
-            deps.extend(['pandas', 'numpy'])
-        
-        # Testing
-        deps.extend(['pytest', 'requests'])
-        
-        return deps
-    
-    async def edit_ui_files(self, plan: Dict[str, Any], thought_signature: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Edit existing UI files based on task plan using Gemini AI.
-        
-        Args:
-            plan: Task plan from PM Agent for UI editing
-            thought_signature: Context and insights from previous agent interactions
-            
-        Returns:
-            Dict containing modified files and UI changes made
-        """
-        logger.info(f"Dev Agent editing UI files with Gemini AI for plan: {plan.get('task_id', 'unknown')}")
-        
-        try:
-            import google.generativeai as genai
-            from core.config import settings
-            import os
-            
-            # Configure Gemini API
-            if not settings.gemini_api_key:
-                logger.warning("No Gemini API key found, using fallback UI editing")
-                return self._fallback_ui_editing(plan)
-            
-            genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel('models/gemini-2.5-flash')
-            
-            # Read current UI files
-            current_files = {}
-            target_files = plan.get("target_files", ["src/App.tsx"])
-            
-            # Get the orchestrator directory (where this script is running from)
-            orchestrator_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            # todo-ui is now inside orchestrator
-            todo_ui_base = os.path.join(orchestrator_dir, "todo-ui")
-            
-            for file_path in target_files:
-                full_path = os.path.join(todo_ui_base, file_path)
-                if os.path.exists(full_path):
-                    with open(full_path, 'r', encoding='utf-8') as f:
-                        current_files[file_path] = f.read()
-                else:
-                    logger.error(f"Target file not found: {full_path}")
-            
-            if not current_files:
-                return {
-                    "status": "error",
-                    "message": "No target files found for UI editing"
-                }
-            
-            # Create detailed prompt for UI editing
-            prompt = f"""
-            As a Senior React Developer, modify the existing Todo UI based on this request:
-            
-            Task: {plan.get('description', 'Unknown task')}
-            Priority: {plan.get('priority', 'medium')}
-            Breakdown: {', '.join(plan.get('breakdown', []))}
-            
-            Current Files:
-            {self._format_files_for_prompt(current_files)}
-            
-            Please:
-            1. Analyze the current React code structure
-            2. Implement the requested changes while maintaining existing functionality
-            3. Follow React best practices and TypeScript conventions
-            4. Ensure accessibility and responsive design
-            5. Maintain the existing API integration patterns
-            6. Keep the current styling approach consistent
-            
-            Provide the complete modified file content for each file that needs changes.
-            Explain what changes were made and why.
-            
-            Focus on:
-            - Clean, maintainable React code
-            - Proper TypeScript typing
-            - Accessibility (ARIA labels, keyboard navigation)
-            - Responsive design
-            - User experience improvements
-            """
-            
-            response = model.generate_content(prompt)
-            
-            # Parse the AI response and apply changes
-            ui_changes = self._parse_ui_response(response.text, current_files, plan)
-            
-            # Write modified files back to disk using the new file operations
-            from tools.file_ops import update_todo_ui_component
-            
-            modified_files = []
-            component_updates = {}
-            
-            for file_path, new_content in ui_changes.get("modified_files", {}).items():
-                component_updates[file_path] = new_content
-            
-            if component_updates:
-                update_result = update_todo_ui_component(component_updates)
-                
-                if update_result["status"] in ["success", "partial_success"]:
-                    modified_files = [f["file_path"] for f in update_result["updated_files"]]
-                    logger.info(f"Successfully updated {len(modified_files)} UI files")
-                else:
-                    return {
-                        "status": "error",
-                        "message": f"Failed to update UI files: {update_result.get('error', 'Unknown error')}"
-                    }
-            
-            return {
-                "status": "success",
-                "agent": self.name,
-                "task_id": plan.get("task_id"),
-                "modified_files": modified_files,
-                "ui_changes": ui_changes.get("changes_made", []),
-                "thought_signature": thought_signature,
-                "ai_powered": True
-            }
-            
-        except Exception as e:
-            logger.error(f"Error calling Gemini API for UI editing: {str(e)}")
-            return self._fallback_ui_editing(plan, thought_signature)
-    
-    def _format_files_for_prompt(self, files: Dict[str, str]) -> str:
-        """Format files for inclusion in Gemini prompt."""
-        formatted = ""
-        for file_path, content in files.items():
-            formatted += f"\n--- {file_path} ---\n{content}\n"
-        return formatted
-    
-    def _parse_ui_response(self, response_text: str, current_files: Dict[str, str], plan: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse Gemini AI response to extract modified files and changes."""
-        import re
-        
-        modified_files = {}
-        changes_made = []
-        
-        # Try to extract code blocks for each file
-        for file_path in current_files.keys():
-            # Look for file-specific code blocks
-            file_pattern = rf"(?:```(?:typescript|tsx|react)?\n)?(.*?)(?:\n```)"
-            matches = re.findall(file_pattern, response_text, re.DOTALL)
-            
-            if matches:
-                # Use the largest code block as the modified file
-                largest_match = max(matches, key=len)
-                if len(largest_match.strip()) > 100:  # Ensure it's substantial content
-                    modified_files[file_path] = largest_match.strip()
-            
-            # If no good code block found, try to extract changes and apply them
-            if file_path not in modified_files:
-                # Fallback: make minimal changes based on the request
-                modified_files[file_path] = self._apply_minimal_changes(
-                    current_files[file_path], 
-                    plan.get('description', ''), 
-                    response_text
-                )
-        
-        # Extract change descriptions
-        change_patterns = [
-            r'(?:Added|Modified|Updated|Changed|Implemented):\s*(.+)',
-            r'(?:Change|Modification|Update)\s*\d*:\s*(.+)',
-        ]
-        
-        for pattern in change_patterns:
-            matches = re.findall(pattern, response_text, re.IGNORECASE)
-            changes_made.extend(matches)
-        
-        if not changes_made:
-            changes_made = [
-                f"Applied UI modifications based on request: {plan.get('description', 'Unknown')}",
-                "Updated React components with new functionality",
-                "Maintained existing styling and API integration"
-            ]
-        
-        return {
             "modified_files": modified_files,
-            "changes_made": changes_made[:5]  # Limit to 5 changes
+            "ui_changes": [f"Applied coordinated changes to {', '.join(modified_files)}"]
         }
-    
-    def _apply_minimal_changes(self, original_content: str, description: str, ai_response: str) -> str:
-        """Apply minimal changes when full code extraction fails."""
-        # This is a fallback - in practice, you'd implement more sophisticated parsing
-        # For now, we'll add a comment indicating the change was requested
-        
-        lines = original_content.split('\n')
-        
-        # Add a comment near the top indicating the change
-        comment = f"  // AI Modification: {description}"
-        
-        # Find a good place to insert the comment (after imports, before main component)
-        insert_index = 0
-        for i, line in enumerate(lines):
-            if line.strip().startswith('function App()') or line.strip().startswith('const App'):
-                insert_index = i
-                break
-        
-        lines.insert(insert_index, comment)
-        return '\n'.join(lines)
-    
-    def _fallback_ui_editing(self, plan: Dict[str, Any], thought_signature: Optional[str] = None) -> Dict[str, Any]:
-        """Fallback UI editing when Gemini API is not available."""
-        from tools.file_ops import read_from_todo_ui, update_todo_ui_component
-        
-        # Read current files and make minimal changes
-        target_files = plan.get("target_files", ["src/App.tsx"])
-        component_updates = {}
-        
-        for file_path in target_files:
-            read_result = read_from_todo_ui(file_path)
-            
-            if read_result["status"] == "success":
-                content = read_result["content"]
-                
-                # Add a comment indicating the change was requested
-                modified_content = content.replace(
-                    'function App() {',
-                    f'function App() {{\n  // AI Modification requested: {plan.get("description", "Unknown")}'
-                )
-                
-                component_updates[file_path] = modified_content
-            else:
-                logger.error(f"Error reading file {file_path}: {read_result.get('error', 'Unknown error')}")
-        
-        if component_updates:
-            update_result = update_todo_ui_component(component_updates)
-            
-            if update_result["status"] in ["success", "partial_success"]:
-                modified_files = [f["file_path"] for f in update_result["updated_files"]]
-                
-                return {
-                    "status": "success",
-                    "agent": self.name,
-                    "task_id": plan.get("task_id"),
-                    "modified_files": modified_files,
-                    "ui_changes": [
-                        f"Added comment indicating requested change: {plan.get('description', 'Unknown')}",
-                        "Fallback modification applied (Gemini API not available)"
-                    ],
-                    "thought_signature": thought_signature,
-                    "ai_powered": False
-                }
-            else:
-                return {
-                    "status": "error",
-                    "message": f"Failed to update UI files: {update_result.get('error', 'Unknown error')}"
-                }
-        else:
-            return {
-                "status": "error",
-                "message": "No files could be read for modification"
-            }
+    elif modified_files and errors:
+        return {
+            "status": "partial_success", 
+            "modified_files": modified_files,
+            "errors": errors,
+            "ui_changes": [f"Applied changes to {', '.join(modified_files)}", f"Errors: {'; '.join(errors)}"]
+        }
+    else:
+        return {
+            "status": "error",
+            "errors": errors,
+            "ui_changes": []
+        }

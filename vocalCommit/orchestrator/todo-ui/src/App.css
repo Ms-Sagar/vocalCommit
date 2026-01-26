@@ -1,10 +1,208 @@
+/* --- CSS Variables for Light and Dark Theme --- */
+:root {
+  /* General Backgrounds */
+  --bg-app: #f8f9fa;
+  --bg-card: white;
+  --bg-header: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --bg-modal-overlay: rgba(0, 0, 0, 0.5);
+  --bg-modal-footer: #f8f9fa;
+  --bg-light-hover: #f8f9fa; /* Used for close-btn hover */
+
+  /* Text Colors */
+  --text-primary: #495057;
+  --text-secondary: #6c757d;
+  --text-muted: #adb5bd;
+  --text-light: white; /* For text on dark backgrounds */
+  --text-link: #007bff;
+  --text-header-p: rgba(255, 255, 255, 0.9);
+  --text-polling-status: rgba(255, 255, 255, 0.9);
+  
+  /* Border Colors */
+  --border-base: #e9ecef;
+  --border-input: #dee2e6;
+  --border-dashed: #dee2e6;
+  --border-header-btn: rgba(255, 255, 255, 0.3);
+  --border-spinner-base: rgba(255, 255, 255, 0.3);
+
+  /* Accent & Action Colors */
+  --color-primary-accent: #007bff; /* Blue */
+  --color-success-accent: #28a745; /* Green */
+  --color-warning-accent: #ffc107; /* Yellow */
+  --color-danger-accent: #dc3545; /* Red */
+  --color-info-accent: #0c5460; /* Teal/Blue-green */
+  --color-secondary-accent: #6c757d; /* Grey */
+  --color-primary-gradient-start: #28a745; /* Green gradient start */
+  --color-primary-gradient-end: #20c997; /* Green gradient end */
+
+  /* Component Specific */
+  --filter-btn-bg: white;
+  --filter-btn-text: var(--text-primary);
+  --filter-btn-border: var(--border-input);
+  --filter-btn-hover-text: var(--color-primary-accent);
+  --filter-btn-hover-border: var(--color-primary-accent);
+  --filter-btn-active-bg: var(--color-primary-accent);
+  --filter-btn-active-text: var(--text-light);
+  --filter-btn-active-border: var(--color-primary-accent);
+
+  --refresh-btn-bg: rgba(255, 255, 255, 0.2);
+  --refresh-btn-hover-bg: rgba(255, 255, 255, 0.3);
+
+  --file-tag-bg: #e9ecef;
+  --file-tag-text: var(--text-primary);
+  --dependency-tag-bg: #d1ecf1;
+  --dependency-tag-text: var(--color-info-accent);
+
+  --error-banner-bg: #f8d7da;
+  --error-banner-text: #721c24;
+  --error-banner-border: #f5c6cb;
+  --error-banner-btn-bg: #dc3545;
+  --error-banner-btn-hover-bg: #c82333;
+
+  --loading-h3: var(--color-primary-accent);
+  --loading-border: var(--color-primary-accent);
+
+  --admin-link-bg: var(--color-primary-accent);
+  --admin-link-hover-bg: #0056b3;
+
+  --toast-bg: white;
+  --toast-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --toast-message-text: var(--text-primary);
+  --toast-close-btn-color: var(--text-secondary);
+  --toast-close-btn-hover-color: var(--text-primary);
+
+  --modal-header-text: var(--text-primary);
+  --form-label-text: var(--text-primary);
+  --form-input-text: var(--text-primary);
+  --form-input-focus-border: var(--color-primary-accent);
+
+  --cancel-btn-bg: var(--color-secondary-accent);
+  --cancel-btn-hover-bg: #545b62;
+  --add-btn-bg: var(--color-primary-accent);
+  --add-btn-hover-bg: #0056b3;
+
+  --delete-btn-bg: var(--color-danger-accent);
+  --delete-btn-hover-bg: #c82333;
+
+  --shadow-card: 0 2px 10px rgba(0,0,0,0.1);
+  --shadow-card-hover: 0 4px 20px rgba(0,0,0,0.15);
+  --shadow-modal: 0 10px 30px rgba(0,0,0,0.3);
+  --shadow-btn-hover-success: 0 4px 12px rgba(40, 167, 69, 0.3);
+
+  --status-pending-color: var(--color-secondary-accent);
+  --status-completed-color: var(--color-success-accent);
+  --status-in-progress-color: var(--color-warning-accent);
+}
+
+body.dark-theme {
+  /* General Backgrounds */
+  --bg-app: #1a1a2e; /* Very dark blue */
+  --bg-card: #21213e; /* Darker blue-purple for cards */
+  --bg-header: #31315e; /* Solid dark color for header */
+  --bg-modal-overlay: rgba(0, 0, 0, 0.7);
+  --bg-modal-footer: #2a2a4c;
+  --bg-light-hover: #3a3a60;
+
+  /* Text Colors */
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0c0;
+  --text-muted: #707090;
+  --text-light: white;
+  --text-link: #66b3ff;
+  --text-header-p: rgba(255, 255, 255, 0.7);
+  --text-polling-status: rgba(255, 255, 255, 0.7);
+
+  /* Border Colors */
+  --border-base: #3a3a60;
+  --border-input: #4a4a70;
+  --border-dashed: #4a4a70;
+  --border-header-btn: rgba(255, 255, 255, 0.2);
+  --border-spinner-base: rgba(255, 255, 255, 0.2);
+
+  /* Accent & Action Colors (Darker versions if needed, or keep same) */
+  --color-primary-accent: #66b3ff; /* Lighter blue for visibility */
+  --color-success-accent: #208e3a; /* Darker green */
+  --color-warning-accent: #d4a700; /* Darker yellow */
+  --color-danger-accent: #a52d3a; /* Darker red */
+  --color-info-accent: #b3d9ff; /* Lighter blue for visibility */
+  --color-secondary-accent: #5a6268; /* Darker grey */
+  --color-primary-gradient-start: #208e3a; /* Darker green gradient start */
+  --color-primary-gradient-end: #1a9e72; /* Darker green gradient end */
+
+  /* Component Specific */
+  --filter-btn-bg: var(--bg-card);
+  --filter-btn-text: var(--text-primary);
+  --filter-btn-border: var(--border-input);
+  --filter-btn-hover-text: var(--color-primary-accent);
+  --filter-btn-hover-border: var(--color-primary-accent);
+  --filter-btn-active-bg: var(--color-primary-accent);
+  --filter-btn-active-text: var(--text-light);
+  --filter-btn-active-border: var(--color-primary-accent);
+
+  --refresh-btn-bg: rgba(255, 255, 255, 0.1);
+  --refresh-btn-hover-bg: rgba(255, 255, 255, 0.2);
+
+  --file-tag-bg: #3a3a60;
+  --file-tag-text: var(--text-primary);
+  --dependency-tag-bg: #4d4d7f;
+  --dependency-tag-text: var(--text-dependency-tag);
+
+  --error-banner-bg: #3a1c1d;
+  --error-banner-text: #f0a3a7;
+  --error-banner-border: #4d262d;
+  --error-banner-btn-bg: #a52d3a;
+  --error-banner-btn-hover-bg: #8f2631;
+
+  --loading-h3: var(--color-primary-accent);
+  --loading-border: var(--color-primary-accent);
+
+  --admin-link-bg: var(--color-primary-accent);
+  --admin-link-hover-bg: #004da7;
+
+  --toast-bg: var(--bg-card);
+  --toast-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --toast-message-text: var(--text-primary);
+  --toast-close-btn-color: var(--text-secondary);
+  --toast-close-btn-hover-color: var(--text-primary);
+
+  --modal-header-text: var(--text-primary);
+  --form-label-text: var(--text-primary);
+  --form-input-text: var(--text-primary);
+  --form-input-focus-border: var(--color-primary-accent);
+
+  --cancel-btn-bg: var(--color-secondary-accent);
+  --cancel-btn-hover-bg: #4e555b;
+  --add-btn-bg: var(--color-primary-accent);
+  --add-btn-hover-bg: #004da7;
+
+  --delete-btn-bg: var(--color-danger-accent);
+  --delete-btn-hover-bg: #8f2631;
+
+  --shadow-card: 0 2px 10px rgba(0,0,0,0.3);
+  --shadow-card-hover: 0 4px 20px rgba(0,0,0,0.4);
+  --shadow-modal: 0 10px 30px rgba(0,0,0,0.7);
+  --shadow-btn-hover-success: 0 4px 12px rgba(32, 142, 58, 0.4);
+
+  --status-pending-color: var(--color-secondary-accent);
+  --status-completed-color: var(--color-success-accent);
+  --status-in-progress-color: var(--color-warning-accent);
+}
+
+/* Apply theme background to body */
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--bg-app);
+}
+
 .app {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background-color: #f8f9fa;
+  background-color: var(--bg-app);
   min-height: 100vh;
+  color: var(--text-primary); /* Default text color for the app */
 }
 
 .header {
@@ -12,8 +210,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--bg-header); /* Use variable for background */
+  color: var(--text-light); /* Text always light in header */
   padding: 30px;
   border-radius: 12px;
   flex-wrap: wrap;
@@ -22,38 +220,69 @@
 
 .header-content {
   flex: 1;
+  color: var(--text-light); /* Ensure content text is light */
 }
 
 .header h1 {
   margin: 0 0 10px 0;
   font-size: 2.5rem;
+  color: var(--text-light); /* Ensure heading is light */
 }
 
 .header p {
   margin: 0;
   opacity: 0.9;
   font-size: 1.1rem;
+  color: var(--text-header-p);
 }
 
 .refresh-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: var(--refresh-btn-bg);
+  color: var(--text-light);
+  border: 1px solid var(--border-header-btn);
   padding: 10px 20px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 1rem;
   transition: all 0.3s ease;
+  margin-top: 0; /* Override potential previous margin */
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--refresh-btn-hover-bg);
 }
 
 .refresh-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+.theme-toggle-btn {
+  background: var(--refresh-btn-bg);
+  color: var(--text-light);
+  border: 1px solid var(--border-header-btn);
+  width: 40px; /* fixed width for square/circle */
+  height: 40px; /* fixed height for square/circle */
+  border-radius: 50%; /* Make it circular */
+  display: flex; /* To center the icon */
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  font-size: 1.2rem; /* Size of the icon */
+  transition: all 0.3s ease;
+  flex-shrink: 0; /* Prevent it from shrinking in flex container */
+}
+
+.theme-toggle-btn:hover {
+  background: var(--refresh-btn-hover-bg);
+}
+
+.theme-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor; /* Use the button's text color */
+}
+
 
 .stats {
   display: grid;
@@ -63,23 +292,23 @@
 }
 
 .stat-card {
-  background: white;
+  background: var(--bg-card);
   padding: 25px;
   border-radius: 12px;
   text-align: center;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  border: 1px solid #e9ecef;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-base);
 }
 
 .stat-card h3 {
   margin: 0 0 10px 0;
   font-size: 2.5rem;
-  color: #495057;
+  color: var(--text-primary); /* Changed to primary text */
 }
 
 .stat-card p {
   margin: 0;
-  color: #6c757d;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 
@@ -92,9 +321,9 @@
 
 .filters button {
   padding: 12px 24px;
-  border: 2px solid #dee2e6;
-  background: white;
-  color: #495057;
+  border: 2px solid var(--filter-btn-border);
+  background: var(--filter-btn-bg);
+  color: var(--filter-btn-text);
   border-radius: 8px;
   font-weight: 500;
   cursor: pointer;
@@ -102,14 +331,14 @@
 }
 
 .filters button:hover {
-  border-color: #007bff;
-  color: #007bff;
+  border-color: var(--filter-btn-hover-border);
+  color: var(--filter-btn-hover-text);
 }
 
 .filters button.active {
-  background: #007bff;
-  color: white;
-  border-color: #007bff;
+  background: var(--filter-btn-active-bg);
+  color: var(--filter-btn-active-text);
+  border-color: var(--filter-btn-active-border);
 }
 
 .todos-container {
@@ -120,33 +349,33 @@
 .no-todos {
   text-align: center;
   padding: 60px 20px;
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
-  border: 2px dashed #dee2e6;
+  border: 2px dashed var(--border-dashed);
 }
 
 .no-todos h3 {
-  color: #6c757d;
+  color: var(--text-secondary);
   margin-bottom: 10px;
 }
 
 .no-todos p {
-  color: #adb5bd;
+  color: var(--text-muted);
   margin: 0;
 }
 
 .todo-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
   padding: 25px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  border: 1px solid #e9ecef;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-base);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .todo-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .todo-header {
@@ -160,7 +389,7 @@
 
 .todo-header h3 {
   margin: 0;
-  color: #495057;
+  color: var(--text-primary);
   font-size: 1.3rem;
   flex: 1;
 }
@@ -174,14 +403,14 @@
 .status-badge, .priority-badge {
   padding: 4px 12px;
   border-radius: 20px;
-  color: white;
+  color: var(--text-light); /* Always light text on badges */
   font-size: 0.8rem;
   font-weight: 500;
   text-transform: capitalize;
 }
 
 .todo-description {
-  color: #6c757d;
+  color: var(--text-secondary);
   line-height: 1.6;
   margin-bottom: 20px;
 }
@@ -192,7 +421,7 @@
 
 .todo-files h4, .todo-dependencies h4 {
   margin: 0 0 8px 0;
-  color: #495057;
+  color: var(--text-primary);
   font-size: 0.9rem;
 }
 
@@ -203,8 +432,8 @@
 }
 
 .file-tag, .dependency-tag {
-  background: #e9ecef;
-  color: #495057;
+  background: var(--file-tag-bg);
+  color: var(--file-tag-text);
   padding: 4px 8px;
   border-radius: 6px;
   font-size: 0.8rem;
@@ -212,8 +441,8 @@
 }
 
 .dependency-tag {
-  background: #d1ecf1;
-  color: #0c5460;
+  background: var(--dependency-tag-bg);
+  color: var(--dependency-tag-text);
 }
 
 .todo-footer {
@@ -222,13 +451,13 @@
   align-items: center;
   margin-top: 20px;
   padding-top: 15px;
-  border-top: 1px solid #e9ecef;
+  border-top: 1px solid var(--border-base);
   flex-wrap: wrap;
   gap: 10px;
 }
 
 .todo-footer small {
-  color: #adb5bd;
+  color: var(--text-muted);
   font-size: 0.8rem;
 }
 
@@ -236,18 +465,18 @@
   text-align: center;
   margin-top: 40px;
   padding: 20px;
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-base);
 }
 
 .footer p {
   margin: 5px 0;
-  color: #6c757d;
+  color: var(--text-secondary);
 }
 
 .footer a {
-  color: #007bff;
+  color: var(--text-link);
   text-decoration: none;
 }
 
@@ -282,32 +511,11 @@
     align-items: flex-start;
   }
 }
-/* New styles for real data integration */
-.refresh-btn {
-  background: rgba(255,255,255,0.2);
-  color: white;
-  border: 1px solid rgba(255,255,255,0.3);
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  margin-top: 10px;
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: rgba(255,255,255,0.3);
-}
-
-.refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 
 .error-banner {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+  background: var(--error-banner-bg);
+  color: var(--error-banner-text);
+  border: 1px solid var(--error-banner-border);
   border-radius: 8px;
   padding: 15px;
   margin-bottom: 20px;
@@ -317,8 +525,8 @@
 }
 
 .error-banner button {
-  background: #dc3545;
-  color: white;
+  background: var(--error-banner-btn-bg);
+  color: var(--text-light);
   border: none;
   padding: 6px 12px;
   border-radius: 4px;
@@ -327,31 +535,31 @@
 }
 
 .error-banner button:hover {
-  background: #c82333;
+  background: var(--error-banner-btn-hover-bg);
 }
 
 .loading {
   text-align: center;
   padding: 60px 20px;
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
-  border: 2px dashed #007bff;
+  border: 2px dashed var(--loading-border);
 }
 
 .loading h3 {
-  color: #007bff;
+  color: var(--loading-h3);
   margin-bottom: 10px;
 }
 
 .loading p {
-  color: #6c757d;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .admin-link {
   display: inline-block;
-  background: #007bff;
-  color: white;
+  background: var(--admin-link-bg);
+  color: var(--text-light); /* Changed to text-light as admin link is usually on a colored background */
   padding: 10px 20px;
   border-radius: 8px;
   text-decoration: none;
@@ -360,9 +568,9 @@
 }
 
 .admin-link:hover {
-  background: #0056b3;
+  background: var(--admin-link-hover-bg);
   text-decoration: none;
-  color: white;
+  color: var(--text-light);
   transform: translateY(-2px);
 }
 
@@ -372,14 +580,14 @@
 
 .todo-notes h4 {
   margin: 0 0 8px 0;
-  color: #495057;
+  color: var(--text-primary);
   font-size: 0.9rem;
 }
 
 .todo-notes ul {
   margin: 0;
   padding-left: 20px;
-  color: #6c757d;
+  color: var(--text-secondary);
 }
 
 .todo-notes li {
@@ -391,12 +599,12 @@
 .todo-actions {
   margin-bottom: 15px;
   padding-bottom: 15px;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--border-base);
 }
 
 .generate-files-btn {
-  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--color-primary-gradient-start) 0%, var(--color-primary-gradient-end) 100%);
+  color: var(--text-light);
   border: none;
   padding: 10px 20px;
   border-radius: 8px;
@@ -411,7 +619,7 @@
 
 .generate-files-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+  box-shadow: var(--shadow-btn-hover-success);
 }
 
 .generate-files-btn:disabled {
@@ -422,52 +630,35 @@
 
 /* Status-specific styling */
 .todo-card[data-status="pending"] {
-  border-left-color: #6c757d;
+  border-left-color: var(--status-pending-color);
 }
 
 .todo-card[data-status="completed"] {
-  border-left-color: #28a745;
+  border-left-color: var(--status-completed-color);
 }
 
 .todo-card[data-status="in-progress"] {
-  border-left-color: #ffc107;
+  border-left-color: var(--status-in-progress-color);
 }
 
 /* Real-time updates indicator */
 .footer p:last-child {
-  color: #28a745;
+  color: var(--color-success-accent);
   font-weight: 500;
 }
 
 /* Spinner Component */
 .spinner {
   display: inline-block;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid var(--border-spinner-base);
   border-radius: 50%;
-  border-top: 2px solid #007bff;
+  border-top: 2px solid var(--border-spinner-top);
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-/* Theme Toggle Button */
-.theme-toggle-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition: all 0.3s ease;
-  margin-left: 10px;
-}
-
-.theme-toggle-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Header Actions */
@@ -483,11 +674,11 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-polling-status);
   padding: 6px 12px;
   border-radius: 6px;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-polling-status);
 }
 
 /* Toast Notifications */
@@ -502,10 +693,10 @@
 }
 
 .toast {
-  background: white;
+  background: var(--toast-bg);
   border-radius: 8px;
   padding: 15px 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--toast-shadow);
   border-left: 4px solid;
   display: flex;
   justify-content: space-between;
@@ -515,16 +706,16 @@
 }
 
 .toast.success {
-  border-left-color: #28a745;
+  border-left-color: var(--color-success-accent);
 }
 
 .toast.error {
-  border-left-color: #dc3545;
+  border-left-color: var(--color-danger-accent);
 }
 
 .toast-message {
   margin: 0;
-  color: #495057;
+  color: var(--toast-message-text);
   font-weight: 500;
 }
 
@@ -533,13 +724,13 @@
   border: none;
   font-size: 1.2rem;
   cursor: pointer;
-  color: #6c757d;
+  color: var(--toast-close-btn-color);
   padding: 0;
   margin-left: 15px;
 }
 
 .toast-close-btn:hover {
-  color: #495057;
+  color: var(--toast-close-btn-hover-color);
 }
 
 @keyframes slideIn {
@@ -558,70 +749,6 @@
   opacity: 0.7;
   pointer-events: none;
 }
-
-/* Dark Theme Support */
-[data-theme="dark"] {
-  background-color: #1a1a1a;
-  color: #e9ecef;
-}
-
-[data-theme="dark"] .app {
-  background-color: #1a1a1a;
-  color: #e9ecef;
-}
-
-[data-theme="dark"] .stat-card,
-[data-theme="dark"] .todo-card,
-[data-theme="dark"] .modal,
-[data-theme="dark"] .footer {
-  background-color: #2d2d2d;
-  border-color: #404040;
-  color: #e9ecef;
-}
-
-[data-theme="dark"] .no-todos {
-  background-color: #2d2d2d;
-  border-color: #404040;
-}
-
-[data-theme="dark"] .filters button {
-  background-color: #2d2d2d;
-  border-color: #404040;
-  color: #e9ecef;
-}
-
-[data-theme="dark"] .filters button:hover {
-  border-color: #007bff;
-  color: #007bff;
-}
-
-[data-theme="dark"] .filters button.active {
-  background: #007bff;
-  color: white;
-  border-color: #007bff;
-}
-
-[data-theme="dark"] .form-group input,
-[data-theme="dark"] .form-group textarea,
-[data-theme="dark"] .form-group select,
-[data-theme="dark"] .status-controls select {
-  background-color: #2d2d2d;
-  border-color: #404040;
-  color: #e9ecef;
-}
-
-[data-theme="dark"] .modal-footer {
-  background-color: #2d2d2d;
-}
-
-[data-theme="dark"] .toast {
-  background-color: #2d2d2d;
-  color: #e9ecef;
-}
-
-[data-theme="dark"] .toast-message {
-  color: #e9ecef;
-}
 /* Controls Section */
 .controls {
   display: flex;
@@ -633,8 +760,8 @@
 }
 
 .add-todo-btn {
-  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--color-primary-gradient-start) 0%, var(--color-primary-gradient-end) 100%);
+  color: var(--text-light);
   border: none;
   padding: 12px 24px;
   border-radius: 8px;
@@ -649,7 +776,7 @@
 
 .add-todo-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+  box-shadow: var(--shadow-btn-hover-success);
 }
 
 /* Modal Styles */
@@ -659,7 +786,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--bg-modal-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -667,9 +794,9 @@
 }
 
 .modal {
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-modal);
   max-width: 500px;
   width: 90%;
   max-height: 80vh;
@@ -681,12 +808,12 @@
   justify-content: space-between;
   align-items: center;
   padding: 20px 25px;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--border-base);
 }
 
 .modal-header h3 {
   margin: 0;
-  color: #495057;
+  color: var(--modal-header-text);
 }
 
 .close-btn {
@@ -694,7 +821,7 @@
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #6c757d;
+  color: var(--text-secondary);
   padding: 0;
   width: 30px;
   height: 30px;
@@ -706,8 +833,8 @@
 }
 
 .close-btn:hover {
-  background: #f8f9fa;
-  color: #495057;
+  background: var(--bg-light-hover);
+  color: var(--text-primary);
 }
 
 .modal-body {
@@ -722,7 +849,7 @@
   display: block;
   margin-bottom: 8px;
   font-weight: 500;
-  color: #495057;
+  color: var(--form-label-text);
 }
 
 .form-group input,
@@ -730,18 +857,20 @@
 .form-group select {
   width: 100%;
   padding: 10px 12px;
-  border: 2px solid #dee2e6;
+  border: 2px solid var(--border-input);
   border-radius: 6px;
   font-size: 1rem;
   transition: border-color 0.3s ease;
   box-sizing: border-box;
+  background-color: var(--bg-card); /* Ensure input background also changes */
+  color: var(--form-input-text);
 }
 
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #007bff;
+  border-color: var(--form-input-focus-border);
 }
 
 .modal-footer {
@@ -749,8 +878,8 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 20px 25px;
-  border-top: 1px solid #e9ecef;
-  background: #f8f9fa;
+  border-top: 1px solid var(--border-base);
+  background: var(--bg-modal-footer);
   border-radius: 0 0 12px 12px;
 }
 
@@ -762,24 +891,23 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
+  color: var(--text-light); /* Both buttons have light text */
 }
 
 .cancel-btn {
-  background: #6c757d;
-  color: white;
+  background: var(--cancel-btn-bg);
 }
 
 .cancel-btn:hover {
-  background: #545b62;
+  background: var(--cancel-btn-hover-bg);
 }
 
 .add-btn {
-  background: #007bff;
-  color: white;
+  background: var(--add-btn-bg);
 }
 
 .add-btn:hover:not(:disabled) {
-  background: #0056b3;
+  background: var(--add-btn-hover-bg);
 }
 
 .add-btn:disabled {
@@ -787,18 +915,8 @@
   cursor: not-allowed;
 }
 
-/* Todo Actions */
-.todo-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 15px;
-  padding-top: 15px;
-  border-top: 1px solid #e9ecef;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
+/* Todo Actions (duplicated, keep the one closer to original source but ensure variables are used) */
+/* This section was duplicated in the original. Consolidating to the one below for clarity. */
 .status-controls {
   display: flex;
   align-items: center;
@@ -807,19 +925,21 @@
 
 .status-controls label {
   font-weight: 500;
-  color: #495057;
+  color: var(--form-label-text);
 }
 
 .status-controls select {
   padding: 6px 10px;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border-input);
   border-radius: 4px;
   font-size: 0.9rem;
+  background-color: var(--bg-card); /* Ensure select background also changes */
+  color: var(--form-input-text);
 }
 
 .delete-btn {
-  background: #dc3545;
-  color: white;
+  background: var(--delete-btn-bg);
+  color: var(--text-light);
   border: none;
   padding: 6px 12px;
   border-radius: 4px;
@@ -829,35 +949,8 @@
 }
 
 .delete-btn:hover {
-  background: #c82333;
+  background: var(--delete-btn-hover-bg);
   transform: translateY(-1px);
-}
-
-/* Error Banner */
-.error-banner {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.error-banner button {
-  background: #721c24;
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.error-banner button:hover {
-  background: #5a1419;
 }
 
 /* Responsive Styles */

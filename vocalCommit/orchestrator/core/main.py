@@ -10,9 +10,10 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agents.pm_agent.pm_logic import PMAgent
-from agents.dev_agent.dev_logic import DevAgent
+from agents.dev_agent.dev_logic import run_dev_agent, process_ui_editing_plan
 from agents.security_agent.sec_logic import SecurityAgent
 from agents.devops_agent.ops_logic import DevOpsAgent
+from agents.testing_agent.test_logic import run_testing_agent
 from utils.thought_signatures import thought_manager
 from tools.ui_file_watcher import create_ui_watcher
 
@@ -33,7 +34,7 @@ app.add_middleware(
 
 # Initialize agents (Security and DevOps disabled for now)
 pm_agent = PMAgent()
-dev_agent = DevAgent()
+# dev_agent = DevAgent()  # Now using run_dev_agent function directly
 # security_agent = SecurityAgent()  # Disabled
 # devops_agent = DevOpsAgent()      # Disabled
 
@@ -386,13 +387,10 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
                 "task_id": task_id
             }
         
-        # Check if this is a UI editing command
-        ui_keywords = ['todo ui', 'todo-ui', 'ui', 'interface', 'frontend', 'change ui', 'modify ui', 'update ui']
-        is_ui_command = any(keyword in transcript.lower() for keyword in ui_keywords)
-        
-        # Step 1: PM Agent creates a plan
-        logger.info(f"Processing command with PM Agent: {transcript}")
-        pm_result = await pm_agent.plan_task(transcript, is_ui_editing=is_ui_command)
+        # Every command should edit UI directly - no more code generation
+        # Step 1: PM Agent creates a plan for UI editing
+        logger.info(f"Processing command with PM Agent for UI editing: {transcript}")
+        pm_result = await pm_agent.plan_task(transcript, is_ui_editing=True)
         
         if pm_result["status"] != "success":
             return {
@@ -404,34 +402,32 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         
         plan = pm_result["plan"]
         
-        # Store for approval with UI editing flag
+        # Store for approval - everything is UI editing now
         pending_approvals[task_id] = {
             "step": "pm_completed",
             "plan": plan,
             "transcript": transcript,
             "next_step": "dev_agent",
-            "is_ui_editing": is_ui_command,
             "created_at": "2024-01-23T10:00:00Z",
             "requires_approval": True
         }
         
-        # Add to pending workflow state
+        # Add to pending workflow state - everything is UI editing
         workflow_states["pending"][task_id] = {
             "transcript": transcript,
             "plan": plan,
             "status": "pending_approval",
-            "created_at": "2024-01-23T10:00:00Z",
-            "is_ui_editing": is_ui_command
+            "created_at": "2024-01-23T10:00:00Z"
         }
         
         # Create thought signature for PM Agent
         thought_manager.add_thought(task_id, "PM Agent", {
             "summary": f"Created task plan for: {transcript}",
             "outputs": {"plan": plan},
-            "recommendations": ["Proceed with development", "Consider UI/UX implications" if is_ui_command else "Consider security implications"]
+            "recommendations": ["Proceed with development", "Consider UI/UX implications"]
         })
         
-        ui_indicator = "🎨 **UI Editing Task**" if is_ui_command else "💻 **Code Generation Task**"
+        ui_indicator = "🎨 **UI Editing Task**"
         
         return {
             "status": "pending_approval",
@@ -448,8 +444,7 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
             "transcript": transcript,
             "requires_approval": True,
             "next_agent": "Dev Agent",
-            "plan_details": plan,
-            "is_ui_editing": is_ui_command
+            "plan_details": plan
         }
         
     except Exception as e:
@@ -499,8 +494,7 @@ async def approve_task(task_id: str) -> dict:
         "plan": approval_data.get("plan", {}),
         "status": "in_progress",
         "approved_at": "2024-01-23T10:00:00Z",
-        "current_step": "dev_agent",
-        "is_ui_editing": approval_data.get("is_ui_editing", False)
+        "current_step": "dev_agent"
     }
     
     # Remove from pending state immediately
@@ -525,15 +519,12 @@ async def approve_task(task_id: str) -> dict:
             logger.info(f"Approved PM step, proceeding to Dev Agent for task: {task_id}")
             
             plan = approval_data["plan"]
-            is_ui_editing = approval_data.get("is_ui_editing", False)
             dev_context = thought_manager.get_context_for_agent(task_id, "Dev Agent")
             
-            if is_ui_editing:
-                # UI editing workflow - modify existing todo-ui files
-                dev_result = await dev_agent.edit_ui_files(plan, json.dumps(dev_context))
-            else:
-                # Regular code generation workflow
-                dev_result = await dev_agent.write_code(plan, json.dumps(dev_context))
+            # Always use UI editing workflow - modify existing todo-ui files using "Need-to-Know" architecture
+            dev_result = process_ui_editing_plan(plan, approval_data["transcript"])
+            
+            logger.info(f"Dev result: {dev_result}")
             
             if dev_result["status"] != "success":
                 # Don't re-add to pending approvals - task has already been approved
@@ -543,8 +534,8 @@ async def approve_task(task_id: str) -> dict:
                     "transcript": approval_data["transcript"],
                     "status": "error",
                     "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                    "type": "code_generation_failed",
-                    "error": "Dev agent failed to generate code"
+                    "type": "ui_editing_failed",
+                    "error": "Dev agent failed to modify UI files"
                 }
                 
                 # Remove from active state
@@ -554,124 +545,97 @@ async def approve_task(task_id: str) -> dict:
                 return {
                     "status": "error",
                     "agent": "Dev Agent",
-                    "response": "❌ **Code Generation Failed**\n\nThe development agent encountered an error while generating code. The task has been marked as failed and will not reappear for approval.",
+                    "response": "❌ **UI Editing Failed**\n\nThe development agent encountered an error while modifying UI files. The task has been marked as failed and will not reappear for approval.",
                     "task_id": task_id
                 }
             
-            if is_ui_editing:
-                # UI editing completed
-                modified_files = dev_result.get("modified_files", [])
-                
-                # Create thought signature for Dev Agent
-                thought_manager.add_thought(task_id, "Dev Agent", {
-                    "summary": f"Modified UI files for task: {approval_data['transcript']}",
-                    "outputs": {"modified_files": modified_files},
-                    "recommendations": ["Check UI changes", "Test functionality"]
-                })
-                
-                # Task completed
-                task_data = {
-                    "id": task_id,
-                    "title": approval_data["transcript"],
-                    "description": f"Modified todo-ui for: {approval_data['transcript']}",
-                    "status": "completed",
-                    "priority": plan.get("priority", "medium"),
-                    "createdAt": "2024-01-23T10:00:00Z",
-                    "updatedAt": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                    "modified_files": modified_files,
-                    "ui_changes": dev_result.get("ui_changes", []),
-                    "type": "ui_editing"
-                }
-                
-                completed_tasks[task_id] = task_data
-                
-                # Move from active to completed state
-                workflow_states["completed"][task_id] = {
-                    "transcript": approval_data["transcript"],
-                    "status": "completed",
-                    "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                    "type": "ui_editing",
-                    "modified_files": modified_files
-                }
-                
-                # Remove from active state (pending already removed)
-                if task_id in workflow_states["active"]:
-                    del workflow_states["active"][task_id]
-                
-                return {
-                    "status": "completed",
-                    "task_id": task_id,
-                    "agent": "Dev Agent",
-                    "response": f"✅ **UI Editing Completed Successfully!**\n\n"
-                               f"🎨 **Files Modified**: {len(modified_files)} files\n"
-                               f"📁 **Modified Files**: {', '.join(modified_files)}\n"
-                               f"🔄 **Auto-reload**: Changes should be visible immediately\n\n"
-                               f"**UI Changes Made**:\n" + 
-                               "\n".join([f"• {change}" for change in dev_result.get("ui_changes", [])]) + "\n\n"
-                               f"🎯 **Task**: {approval_data['transcript']}\n\n"
-                               f"🌐 **Check UI**: http://localhost:5174",
-                    "transcript": approval_data["transcript"],
-                    "modified_files": modified_files,
-                    "ui_changes": dev_result.get("ui_changes", [])
-                }
-            else:
-                # Regular code generation workflow
-                code_output = dev_result["code_output"]
-                
-                # Create thought signature for Dev Agent
-                thought_manager.add_thought(task_id, "Dev Agent", {
-                    "summary": f"Generated code for task: {approval_data['transcript']}",
-                    "outputs": {"code": code_output},
-                    "recommendations": ["Review code", "Test implementation"]
-                })
-                
-                # Task completed (since Security and DevOps are disabled)
-                task_data = {
-                    "id": task_id,
-                    "title": approval_data["transcript"],
-                    "description": f"Generated code for: {approval_data['transcript']}",
-                    "status": "completed",
-                    "priority": plan.get("priority", "medium"),
-                    "createdAt": "2024-01-23T10:00:00Z",
-                    "updatedAt": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                    "files": list(code_output["files"].keys()),
-                    "dependencies": code_output["dependencies"],
-                    "code_files": code_output["files"],
-                    "implementation_notes": code_output["implementation_notes"],
-                    "type": "code_generation"
-                }
-                
-                completed_tasks[task_id] = task_data
-                
-                # Move from active to completed state
-                workflow_states["completed"][task_id] = {
-                    "transcript": approval_data["transcript"],
-                    "status": "completed",
-                    "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                    "type": "code_generation",
-                    "files": list(code_output["files"].keys())
-                }
-                
-                # Remove from active state (pending already removed)
-                if task_id in workflow_states["active"]:
-                    del workflow_states["active"][task_id]
-                
-                return {
-                    "status": "completed",
-                    "task_id": task_id,
-                    "agent": "Dev Agent",
-                    "response": f"✅ **Task Completed Successfully!**\n\n"
-                               f"💻 **Code Generated**: {len(code_output['files'])} files\n"
-                               f"📁 **Files Created**: {', '.join(code_output['files'].keys())}\n"
-                               f"📦 **Dependencies**: {', '.join(code_output['dependencies'])}\n\n"
-                               f"**Implementation Notes**:\n" + 
-                               "\n".join([f"• {note}" for note in code_output['implementation_notes']]) + "\n\n"
-                               f"🎯 **Task**: {approval_data['transcript']}\n\n"
-                               f"🎉 **Ready for file generation!** Click 'Generate Files to Frontend' to create the actual files.",
-                    "transcript": approval_data["transcript"],
-                    "code_files": code_output["files"],
-                    "dependencies": code_output["dependencies"]
-                }
+            # UI editing completed successfully
+            modified_files = dev_result.get("modified_files", [])
+            
+            # Run comprehensive testing on the modified files
+            logger.info(f"Running comprehensive testing for {len(modified_files)} modified files")
+            test_result = run_testing_agent(approval_data["transcript"], modified_files)
+            logger.info(f"Testing result: {test_result}")
+            
+            # Create thought signature for Dev Agent
+            thought_manager.add_thought(task_id, "Dev Agent", {
+                "summary": f"Modified UI files for task: {approval_data['transcript']}",
+                "outputs": {"modified_files": modified_files},
+                "recommendations": ["Check UI changes", "Test functionality"]
+            })
+            
+            # Create thought signature for Testing Agent
+            thought_manager.add_thought(task_id, "Testing Agent", {
+                "summary": f"Tested implementation for task: {approval_data['transcript']}",
+                "outputs": {"test_results": test_result},
+                "recommendations": test_result.get("recommendations", [])
+            })
+            
+            # Task completed
+            task_data = {
+                "id": task_id,
+                "title": approval_data["transcript"],
+                "description": f"Modified todo-ui for: {approval_data['transcript']}",
+                "status": "completed",
+                "priority": plan.get("priority", "medium"),
+                "createdAt": "2024-01-23T10:00:00Z",
+                "updatedAt": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
+                "modified_files": modified_files,
+                "ui_changes": dev_result.get("ui_changes", []),
+                "test_results": test_result,
+                "type": "ui_editing"
+            }
+            
+            completed_tasks[task_id] = task_data
+            
+            # Move from active to completed state
+            workflow_states["completed"][task_id] = {
+                "transcript": approval_data["transcript"],
+                "status": "completed",
+                "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
+                "type": "ui_editing",
+                "modified_files": modified_files,
+                "test_results": test_result
+            }
+            
+            # Remove from active state (pending already removed)
+            if task_id in workflow_states["active"]:
+                del workflow_states["active"][task_id]
+            
+            # Create response with test results
+            test_status_emoji = {
+                "success": "✅",
+                "partial_success": "⚠️",
+                "warning": "⚠️", 
+                "error": "❌"
+            }.get(test_result.get("status", "unknown"), "❓")
+            
+            test_summary = f"\n\n🧪 **Testing Results**: {test_status_emoji} {test_result.get('overall_assessment', 'Testing completed')}"
+            
+            if test_result.get("tests_run"):
+                test_summary += f"\n📋 **Tests Run**: {', '.join(test_result['tests_run'])}"
+            
+            if test_result.get("recommendations"):
+                test_summary += f"\n💡 **Recommendations**:\n" + "\n".join([f"• {rec}" for rec in test_result["recommendations"][:3]])
+            
+            return {
+                "status": "completed",
+                "task_id": task_id,
+                "agent": "Dev Agent + Testing Agent",
+                "response": f"✅ **UI Editing Completed Successfully!**\n\n"
+                           f"🎨 **Files Modified**: {len(modified_files)} files\n"
+                           f"📁 **Modified Files**: {', '.join(modified_files)}\n"
+                           f"🔄 **Auto-reload**: Changes should be visible immediately\n\n"
+                           f"**UI Changes Made**:\n" + 
+                           "\n".join([f"• {change}" for change in dev_result.get("ui_changes", [])]) + 
+                           test_summary + "\n\n"
+                           f"🎯 **Task**: {approval_data['transcript']}\n\n"
+                           f"🌐 **Check UI**: http://localhost:5174",
+                "transcript": approval_data["transcript"],
+                "modified_files": modified_files,
+                "ui_changes": dev_result.get("ui_changes", []),
+                "test_results": test_result
+            }
         
         else:
             return {
@@ -702,8 +666,7 @@ async def reject_task(task_id: str) -> dict:
         "plan": approval_data.get("plan", {}),
         "status": "rejected",
         "rejected_at": "2024-01-23T10:00:00Z",
-        "reason": "Manual rejection by user",
-        "is_ui_editing": approval_data.get("is_ui_editing", False)
+        "reason": "Manual rejection by user"
     }
     
     # Add to suspended workflows to prevent reappearance

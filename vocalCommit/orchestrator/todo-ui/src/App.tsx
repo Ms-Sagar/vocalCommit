@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from 'uuid'; // For generating temporary IDs
 import './App.css'; // Import the CSS styles
 
 // --- Types ---
-type Theme = 'light' | 'dark';
 type Filter = 'all' | 'completed' | 'active';
 type Priority = 'low' | 'medium' | 'high';
 type Status = 'pending' | 'in-progress' | 'completed';
@@ -240,7 +239,6 @@ function App() {
   const [filter, setFilter] = useState<Filter>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTodoInput, setNewTodoInput] = useState<NewTodoInput>({ title: '', description: '', priority: 'medium' });
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
 
   const [isLoadingTodos, setIsLoadingTodos] = useState(true); // For initial fetch and manual refresh
   const [isPolling, setIsPolling] = useState(false); // For background polling
@@ -249,18 +247,25 @@ function App() {
   const [globalError, setGlobalError] = useState<string | null>(null); // For persistent errors
   const [toasts, setToasts] = useState<Toast[]>([]); // For transient success/error messages
 
+  // Dark mode state and persistence
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const storedTheme = localStorage.getItem('theme');
+    // Default to dark mode if user's system prefers it and no theme is stored
+    if (storedTheme) {
+      return storedTheme === 'dark';
+    }
+    // Check if the user's system prefers dark mode
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  // Apply dark mode class to body and save preference to localStorage
+  useEffect(() => {
+    document.body.classList.toggle('dark-mode', isDarkMode);
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
   // Tracks active optimistic CRUD operations to pause polling
   const activeCrudOperations = useRef(new Set<string>());
-
-  // --- Theme Management ---
-  useEffect(() => {
-    document.body.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
-  };
 
   // --- Toast Management ---
   const addToast = useCallback((message: string, type: ToastType) => {
@@ -493,6 +498,15 @@ function App() {
               <Spinner size="1em" color="var(--text-color-secondary)" /> Refreshing...
             </div>
           )}
+          {/* Theme Toggle Button with persistence and proper styling */}
+          <button
+            className="theme-toggle-btn"
+            onClick={() => setIsDarkMode(prev => !prev)}
+            aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
+            title={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
+          >
+            {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+          </button>
           <button
             className="refresh-btn"
             onClick={() => fetchTodos(true)}
@@ -501,9 +515,6 @@ function App() {
           >
             {isLoadingTodos ? <Spinner /> : null}
             {isLoadingTodos ? 'Loading...' : 'Refresh'}
-          </button>
-          <button className="theme-toggle-btn" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}>
-            {theme === 'light' ? '🌙' : '☀️'}
           </button>
         </div>
       </header>
