@@ -503,9 +503,12 @@ async def approve_task(task_id: str) -> dict:
         "is_ui_editing": approval_data.get("is_ui_editing", False)
     }
     
-    # Remove from pending state
+    # Remove from pending state immediately
     if task_id in workflow_states["pending"]:
         del workflow_states["pending"][task_id]
+    
+    # Remove from pending approvals immediately to prevent re-approval
+    del pending_approvals[task_id]
     
     try:
         if current_step == "pm_completed" and approval_data["next_step"] == "dev_agent":
@@ -533,11 +536,25 @@ async def approve_task(task_id: str) -> dict:
                 dev_result = await dev_agent.write_code(plan, json.dumps(dev_context))
             
             if dev_result["status"] != "success":
-                del pending_approvals[task_id]
+                # Don't re-add to pending approvals - task has already been approved
+                # Add to completed tasks with error status instead
+                completed_tasks[task_id] = {
+                    "task_id": task_id,
+                    "transcript": approval_data["transcript"],
+                    "status": "error",
+                    "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
+                    "type": "code_generation_failed",
+                    "error": "Dev agent failed to generate code"
+                }
+                
+                # Remove from active state
+                if task_id in workflow_states["active"]:
+                    del workflow_states["active"][task_id]
+                
                 return {
                     "status": "error",
                     "agent": "Dev Agent",
-                    "response": "Failed to generate code",
+                    "response": "❌ **Code Generation Failed**\n\nThe development agent encountered an error while generating code. The task has been marked as failed and will not reappear for approval.",
                     "task_id": task_id
                 }
             
@@ -577,10 +594,9 @@ async def approve_task(task_id: str) -> dict:
                     "modified_files": modified_files
                 }
                 
-                # Remove from active and pending states
+                # Remove from active state (pending already removed)
                 if task_id in workflow_states["active"]:
                     del workflow_states["active"][task_id]
-                del pending_approvals[task_id]
                 
                 return {
                     "status": "completed",
@@ -636,10 +652,9 @@ async def approve_task(task_id: str) -> dict:
                     "files": list(code_output["files"].keys())
                 }
                 
-                # Remove from active and pending states
+                # Remove from active state (pending already removed)
                 if task_id in workflow_states["active"]:
                     del workflow_states["active"][task_id]
-                del pending_approvals[task_id]
                 
                 return {
                     "status": "completed",

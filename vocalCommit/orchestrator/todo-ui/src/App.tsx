@@ -1,4 +1,3 @@
-typescript
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // For generating temporary IDs
 import './App.css'; // Import the CSS styles

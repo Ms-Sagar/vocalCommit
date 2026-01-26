@@ -53,6 +53,7 @@ const VoiceInterface: React.FC = () => {
   const [approvalFeedback, setApprovalFeedback] = useState<{[key: string]: string}>({});
   const [processingApprovals, setProcessingApprovals] = useState<{[key: string]: boolean}>({});
   const [generatingFiles, setGeneratingFiles] = useState<{[key: string]: boolean}>({});
+  const [filesGenerated, setFilesGenerated] = useState<{[key: string]: boolean}>({});
   const [editingWorkflow, setEditingWorkflow] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     transcript: '',
@@ -69,13 +70,17 @@ const VoiceInterface: React.FC = () => {
   const getStepDisplayName = (step: string): string => {
     const stepMap: { [key: string]: string } = {
       'pm_completed': 'PM Analysis Complete',
-      'dev_completed': 'Development Complete',
-      'security_completed': 'Security Review Complete',
-      'devops_completed': 'DevOps Review Complete',
       'pm_analysis': 'PM Analysis',
+      'dev_completed': 'Development Complete', 
+      'dev_analysis': 'Development Analysis',
       'dev_implementation': 'Development Implementation',
-      'security_review': 'Security Review',
-      'devops_deployment': 'DevOps Deployment'
+      'security_completed': 'Security Review Complete',
+      'security_analysis': 'Security Analysis',
+      'devops_completed': 'DevOps Review Complete',
+      'devops_analysis': 'DevOps Analysis',
+      'code_review': 'Code Review',
+      'testing': 'Testing Phase',
+      'deployment': 'Deployment Phase'
     };
     
     return stepMap[step] || step.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -84,11 +89,14 @@ const VoiceInterface: React.FC = () => {
   const getNextAgentDisplayName = (nextStep: string): string => {
     const agentMap: { [key: string]: string } = {
       'dev_agent': 'Development Agent',
+      'pm_agent': 'Project Manager Agent',
       'security_agent': 'Security Agent',
       'devops_agent': 'DevOps Agent',
-      'pm_agent': 'Project Manager Agent',
+      'code_review_agent': 'Code Review Agent',
+      'testing_agent': 'Testing Agent',
       'completion': 'Task Completion',
-      'manual_review': 'Manual Review'
+      'manual_review': 'Manual Review',
+      'final_review': 'Final Review'
     };
     
     return agentMap[nextStep] || nextStep.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -418,6 +426,12 @@ const VoiceInterface: React.FC = () => {
       const result = await response.json();
       
       if (result.status === 'success') {
+        // Mark files as generated for this task
+        setFilesGenerated(prev => ({
+          ...prev,
+          [taskId]: true
+        }));
+        
         setMessages(prev => [...prev, {
           status: 'success',
           agent: 'File Generator',
@@ -738,7 +752,7 @@ const VoiceInterface: React.FC = () => {
                     <div className="task-id-display">
                       Task ID: {message.task_id}
                     </div>
-                    {message.status === 'completed' && (
+                    {message.status === 'completed' && !filesGenerated[message.task_id!] && (
                       <button 
                         className="generate-files-btn"
                         onClick={() => generateFilesForTask(message.task_id!)}
@@ -746,6 +760,11 @@ const VoiceInterface: React.FC = () => {
                       >
                         {generatingFiles[message.task_id!] ? '🔄 Generating...' : '📁 Generate Files to Frontend'}
                       </button>
+                    )}
+                    {filesGenerated[message.task_id!] && (
+                      <div className="files-generated-indicator">
+                        ✅ Files Generated Successfully
+                      </div>
                     )}
                   </div>
                 )}

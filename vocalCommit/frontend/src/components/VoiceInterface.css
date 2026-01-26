@@ -1258,3 +1258,61 @@
     transform: translateY(0); 
   }
 }
+/* Files generated indicator */
+.files-generated-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: #e8f5e8;
+  color: #2e7d32;
+  border: 1px solid #81c784;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+/* Enhanced approval type styling */
+.approval-type.dev_analysis,
+.approval-type.dev_completed {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #e1bee7;
+}
+
+.approval-type.code_review {
+  background-color: #e8eaf6;
+  color: #3f51b5;
+  border: 1px solid #c5cae9;
+}
+
+.approval-type.testing {
+  background-color: #fff8e1;
+  color: #f57c00;
+  border: 1px solid #ffcc02;
+}
+
+/* Approval card variations for new types */
+.approval-card.dev_analysis,
+.approval-card.dev_completed {
+  border-left: 4px solid #7b1fa2;
+}
+
+.approval-card.code_review {
+  border-left: 4px solid #3f51b5;
+}
+
+.approval-card.testing {
+  border-left: 4px solid #f57c00;
+}
+
+/* Better spacing for approval details */
+.approval-details p {
+  margin: 6px 0;
+  line-height: 1.4;
+}
+
+.approval-details strong {
+  color: #495057;
+  font-weight: 600;
+}
