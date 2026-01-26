@@ -278,27 +278,20 @@ def handle_error(error):
             
             # Read current UI files
             current_files = {}
-            target_files = plan.get("target_files", ["todo-ui/src/App.tsx"])
+            target_files = plan.get("target_files", ["src/App.tsx"])
             
-            # Get the correct base path (go up from orchestrator to project root)
+            # Get the orchestrator directory (where this script is running from)
             orchestrator_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            project_root = os.path.dirname(orchestrator_dir)
+            # todo-ui is now inside orchestrator
+            todo_ui_base = os.path.join(orchestrator_dir, "todo-ui")
             
             for file_path in target_files:
-                full_path = os.path.join(project_root, file_path)
+                full_path = os.path.join(todo_ui_base, file_path)
                 if os.path.exists(full_path):
                     with open(full_path, 'r', encoding='utf-8') as f:
                         current_files[file_path] = f.read()
                 else:
-                    logger.warning(f"Target file not found: {full_path}")
-                    # Try alternative path
-                    alt_path = os.path.join(os.path.dirname(orchestrator_dir), file_path)
-                    if os.path.exists(alt_path):
-                        with open(alt_path, 'r', encoding='utf-8') as f:
-                            current_files[file_path] = f.read()
-                        logger.info(f"Found file at alternative path: {alt_path}")
-                    else:
-                        logger.error(f"File not found at any expected location: {file_path}")
+                    logger.error(f"Target file not found: {full_path}")
             
             if not current_files:
                 return {
@@ -341,33 +334,25 @@ def handle_error(error):
             # Parse the AI response and apply changes
             ui_changes = self._parse_ui_response(response.text, current_files, plan)
             
-            # Write modified files back to disk
+            # Write modified files back to disk using the new file operations
+            from tools.file_ops import update_todo_ui_component
+            
             modified_files = []
+            component_updates = {}
+            
             for file_path, new_content in ui_changes.get("modified_files", {}).items():
-                # Use the same path resolution as reading
-                full_path = os.path.join(project_root, file_path)
-                if not os.path.exists(full_path):
-                    full_path = os.path.join(os.path.dirname(orchestrator_dir), file_path)
+                component_updates[file_path] = new_content
+            
+            if component_updates:
+                update_result = update_todo_ui_component(component_updates)
                 
-                try:
-                    # Create backup
-                    backup_path = full_path + ".backup"
-                    if os.path.exists(full_path):
-                        with open(backup_path, 'w', encoding='utf-8') as f:
-                            f.write(current_files[file_path])
-                    
-                    # Write new content
-                    with open(full_path, 'w', encoding='utf-8') as f:
-                        f.write(new_content)
-                    
-                    modified_files.append(file_path)
-                    logger.info(f"Successfully modified UI file: {file_path}")
-                    
-                except Exception as e:
-                    logger.error(f"Error writing file {file_path}: {str(e)}")
+                if update_result["status"] in ["success", "partial_success"]:
+                    modified_files = [f["file_path"] for f in update_result["updated_files"]]
+                    logger.info(f"Successfully updated {len(modified_files)} UI files")
+                else:
                     return {
                         "status": "error",
-                        "message": f"Failed to write modified file: {file_path}"
+                        "message": f"Failed to update UI files: {update_result.get('error', 'Unknown error')}"
                     }
             
             return {
@@ -463,50 +448,53 @@ def handle_error(error):
     
     def _fallback_ui_editing(self, plan: Dict[str, Any], thought_signature: Optional[str] = None) -> Dict[str, Any]:
         """Fallback UI editing when Gemini API is not available."""
-        import os
+        from tools.file_ops import read_from_todo_ui, update_todo_ui_component
         
         # Read current files and make minimal changes
-        target_files = plan.get("target_files", ["todo-ui/src/App.tsx"])
-        modified_files = []
-        
-        # Get the correct base path
-        orchestrator_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        project_root = os.path.dirname(orchestrator_dir)
+        target_files = plan.get("target_files", ["src/App.tsx"])
+        component_updates = {}
         
         for file_path in target_files:
-            full_path = os.path.join(project_root, file_path)
-            if not os.path.exists(full_path):
-                full_path = os.path.join(os.path.dirname(orchestrator_dir), file_path)
+            read_result = read_from_todo_ui(file_path)
             
-            if os.path.exists(full_path):
-                try:
-                    with open(full_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    
-                    # Add a comment indicating the change was requested
-                    modified_content = content.replace(
-                        'function App() {',
-                        f'function App() {{\n  // AI Modification requested: {plan.get("description", "Unknown")}'
-                    )
-                    
-                    # Write back
-                    with open(full_path, 'w', encoding='utf-8') as f:
-                        f.write(modified_content)
-                    
-                    modified_files.append(file_path)
-                    
-                except Exception as e:
-                    logger.error(f"Error in fallback UI editing for {file_path}: {str(e)}")
+            if read_result["status"] == "success":
+                content = read_result["content"]
+                
+                # Add a comment indicating the change was requested
+                modified_content = content.replace(
+                    'function App() {',
+                    f'function App() {{\n  // AI Modification requested: {plan.get("description", "Unknown")}'
+                )
+                
+                component_updates[file_path] = modified_content
+            else:
+                logger.error(f"Error reading file {file_path}: {read_result.get('error', 'Unknown error')}")
         
-        return {
-            "status": "success",
-            "agent": self.name,
-            "task_id": plan.get("task_id"),
-            "modified_files": modified_files,
-            "ui_changes": [
-                f"Added comment indicating requested change: {plan.get('description', 'Unknown')}",
-                "Fallback modification applied (Gemini API not available)"
-            ],
-            "thought_signature": thought_signature,
-            "ai_powered": False
-        }
+        if component_updates:
+            update_result = update_todo_ui_component(component_updates)
+            
+            if update_result["status"] in ["success", "partial_success"]:
+                modified_files = [f["file_path"] for f in update_result["updated_files"]]
+                
+                return {
+                    "status": "success",
+                    "agent": self.name,
+                    "task_id": plan.get("task_id"),
+                    "modified_files": modified_files,
+                    "ui_changes": [
+                        f"Added comment indicating requested change: {plan.get('description', 'Unknown')}",
+                        "Fallback modification applied (Gemini API not available)"
+                    ],
+                    "thought_signature": thought_signature,
+                    "ai_powered": False
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Failed to update UI files: {update_result.get('error', 'Unknown error')}"
+                }
+        else:
+            return {
+                "status": "error",
+                "message": "No files could be read for modification"
+            }

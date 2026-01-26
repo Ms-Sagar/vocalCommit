@@ -270,11 +270,11 @@ function App() {
   }, []);
 
   // --- CRUD Operation Wrapper for consistent loading/error handling ---
-  const handleCrudOperation = useCallback(async <T>(
+  const handleCrudOperation = useCallback(async (
     operationId: string, // Unique ID for the operation, e.g., todo.id or 'add_new'
-    apiCall: () => Promise<T>,
+    apiCall: () => Promise<any>,
     optimisticUpdate: () => void,
-    onSuccess: (result: T) => void,
+    onSuccess: (result: any) => void,
     onFailure: (error: Error) => void,
     isAddOperation = false // Special handling for add operation's `isAddingTodo` state
   ) => {
@@ -379,7 +379,7 @@ function App() {
 
     await handleCrudOperation(
       tempId, // Use tempId for tracking the operation
-      () => mockApi.addTodo(newTodoInput),
+      () => mockApi.addTodo({ ...newTodoInput, status: 'pending' }),
       () => {
         // Optimistic update
         setTodos((prevTodos) => [optimisticTodo, ...prevTodos]);

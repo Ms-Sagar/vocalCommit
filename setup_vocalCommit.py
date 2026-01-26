@@ -96,7 +96,7 @@ def setup_todo_ui():
     """Setup the todo UI."""
     print("📋 Setting up todo UI...")
     
-    todo_ui_path = Path("vocalCommit/todo-ui")
+    todo_ui_path = Path("vocalCommit/orchestrator/todo-ui")
     if not todo_ui_path.exists():
         print("❌ Todo UI directory not found")
         sys.exit(1)
@@ -151,8 +151,8 @@ def print_startup_instructions():
     print("  cd vocalCommit/frontend")
     print("  npm run dev")
     print()
-    print("Terminal 3 - Todo UI:")
-    print("  cd vocalCommit/todo-ui")
+    print("Terminal 3 - Todo UI (now inside orchestrator):")
+    print("  cd vocalCommit/orchestrator/todo-ui")
     print("  npm run dev")
     print()
     

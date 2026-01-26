@@ -5,26 +5,30 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def write_to_frontend(file_path: str, content: str, frontend_base: str = "../frontend") -> Dict[str, Any]:
+def write_to_todo_ui(file_path: str, content: str) -> Dict[str, Any]:
     """
-    Safely write files to the frontend folder.
+    Safely write files to the todo-ui folder (now inside orchestrator).
     
     Args:
-        file_path: Relative path within frontend folder
+        file_path: Relative path within todo-ui folder
         content: File content to write
-        frontend_base: Base path to frontend folder
         
     Returns:
         Dict containing operation status and details
     """
     try:
-        # Resolve and validate the target path
-        frontend_path = Path(frontend_base).resolve()
-        target_path = (frontend_path / file_path).resolve()
+        # Get the orchestrator directory (where this script is running from)
+        orchestrator_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # todo-ui is now inside orchestrator
+        todo_ui_base = os.path.join(orchestrator_dir, "todo-ui")
         
-        # Security check: ensure target is within frontend directory
-        if not str(target_path).startswith(str(frontend_path)):
-            raise ValueError("Invalid file path: outside frontend directory")
+        # Resolve and validate the target path
+        todo_ui_path = Path(todo_ui_base).resolve()
+        target_path = (todo_ui_path / file_path).resolve()
+        
+        # Security check: ensure target is within todo-ui directory
+        if not str(target_path).startswith(str(todo_ui_path)):
+            raise ValueError("Invalid file path: outside todo-ui directory")
         
         # Create parent directories if they don't exist
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -49,24 +53,28 @@ def write_to_frontend(file_path: str, content: str, frontend_base: str = "../fro
             "file_path": file_path
         }
 
-def read_from_frontend(file_path: str, frontend_base: str = "../frontend") -> Dict[str, Any]:
+def read_from_todo_ui(file_path: str) -> Dict[str, Any]:
     """
-    Safely read files from the frontend folder.
+    Safely read files from the todo-ui folder (now inside orchestrator).
     
     Args:
-        file_path: Relative path within frontend folder
-        frontend_base: Base path to frontend folder
+        file_path: Relative path within todo-ui folder
         
     Returns:
         Dict containing file content and metadata
     """
     try:
-        frontend_path = Path(frontend_base).resolve()
-        target_path = (frontend_path / file_path).resolve()
+        # Get the orchestrator directory (where this script is running from)
+        orchestrator_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # todo-ui is now inside orchestrator
+        todo_ui_base = os.path.join(orchestrator_dir, "todo-ui")
+        
+        todo_ui_path = Path(todo_ui_base).resolve()
+        target_path = (todo_ui_path / file_path).resolve()
         
         # Security check
-        if not str(target_path).startswith(str(frontend_path)):
-            raise ValueError("Invalid file path: outside frontend directory")
+        if not str(target_path).startswith(str(todo_ui_path)):
+            raise ValueError("Invalid file path: outside todo-ui directory")
         
         if not target_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
@@ -135,5 +143,143 @@ def create_project_structure(base_path: str, structure: Dict[str, Any]) -> Dict[
             "status": "error",
             "error": str(e),
             "created_items": created_items,
+            "errors": errors
+        }
+
+def update_todo_ui_component(component_updates: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Update todo-ui components directly with new code.
+    
+    Args:
+        component_updates: Dict mapping file paths to new content
+        
+    Returns:
+        Dict containing update results
+    """
+    updated_files = []
+    errors = []
+    
+    try:
+        for file_path, new_content in component_updates.items():
+            # Create backup first
+            backup_result = create_backup_file(file_path)
+            if backup_result["status"] != "success":
+                errors.append(f"Failed to backup {file_path}: {backup_result['error']}")
+                continue
+            
+            # Write new content
+            result = write_to_todo_ui(file_path, new_content)
+            if result["status"] == "success":
+                updated_files.append({
+                    "file_path": file_path,
+                    "size_bytes": result["size_bytes"],
+                    "backup_created": True
+                })
+                logger.info(f"Updated todo-ui component: {file_path}")
+            else:
+                errors.append(f"Failed to update {file_path}: {result['error']}")
+        
+        return {
+            "status": "success" if not errors else "partial_success",
+            "updated_files": updated_files,
+            "errors": errors,
+            "total_updated": len(updated_files)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error updating todo-ui components: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "updated_files": updated_files,
+            "errors": errors
+        }
+
+def create_backup_file(file_path: str) -> Dict[str, Any]:
+    """
+    Create a backup of a todo-ui file before modifying it.
+    
+    Args:
+        file_path: Relative path within todo-ui folder
+        
+    Returns:
+        Dict containing backup operation result
+    """
+    try:
+        # Read original file
+        read_result = read_from_todo_ui(file_path)
+        if read_result["status"] != "success":
+            return read_result
+        
+        # Create backup with timestamp
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = f"{file_path}.backup_{timestamp}"
+        
+        # Write backup
+        backup_result = write_to_todo_ui(backup_path, read_result["content"])
+        if backup_result["status"] == "success":
+            logger.info(f"Created backup: {backup_path}")
+            return {
+                "status": "success",
+                "backup_path": backup_path,
+                "original_size": read_result["size_bytes"]
+            }
+        else:
+            return backup_result
+            
+    except Exception as e:
+        logger.error(f"Failed to create backup for {file_path}: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+def generate_code_to_todo_ui(task_id: str, code_files: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Generate code files directly into todo-ui src directory.
+    
+    Args:
+        task_id: Task identifier for organizing generated files
+        code_files: Dict mapping filenames to code content
+        
+    Returns:
+        Dict containing generation results
+    """
+    generated_files = []
+    errors = []
+    
+    try:
+        # Create a generated folder inside todo-ui/src
+        generated_dir = f"src/generated/{task_id}"
+        
+        for filename, content in code_files.items():
+            file_path = f"{generated_dir}/{filename}"
+            result = write_to_todo_ui(file_path, content)
+            
+            if result["status"] == "success":
+                generated_files.append({
+                    "filename": filename,
+                    "path": result["file_path"],
+                    "size": result["size_bytes"]
+                })
+                logger.info(f"Generated code file: {file_path}")
+            else:
+                errors.append(f"Failed to generate {filename}: {result['error']}")
+        
+        return {
+            "status": "success" if not errors else "partial_success",
+            "generated_files": generated_files,
+            "errors": errors,
+            "total_generated": len(generated_files),
+            "generated_dir": generated_dir
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating code to todo-ui: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "generated_files": generated_files,
             "errors": errors
         }

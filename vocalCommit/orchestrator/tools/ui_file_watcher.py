@@ -99,13 +99,12 @@ class UIFileWatcher:
         }
 
 def create_ui_watcher(todo_ui_path: str = "todo-ui/src") -> UIFileWatcher:
-    """Create a UI file watcher for the todo-ui directory."""
-    # Get the absolute path to the orchestrator directory
+    """Create a UI file watcher for the todo-ui directory (now inside orchestrator)."""
+    # Get the orchestrator directory (where this script is running from)
     orchestrator_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    project_root = os.path.dirname(orchestrator_dir)
     
-    # Build absolute paths
-    base_todo_path = os.path.join(project_root, "todo-ui", "src")
+    # Build absolute paths - todo-ui is now inside orchestrator
+    base_todo_path = os.path.join(orchestrator_dir, "todo-ui", "src")
     watch_paths = []
     
     # Only add paths that actually exist
@@ -114,9 +113,9 @@ def create_ui_watcher(todo_ui_path: str = "todo-ui/src") -> UIFileWatcher:
     
     # Add additional paths if they exist
     additional_paths = [
-        os.path.join(project_root, "todo-ui", "src", "components"),
-        os.path.join(project_root, "todo-ui", "src", "styles"),
-        os.path.join(project_root, "todo-ui", "public")
+        os.path.join(orchestrator_dir, "todo-ui", "src", "components"),
+        os.path.join(orchestrator_dir, "todo-ui", "src", "styles"),
+        os.path.join(orchestrator_dir, "todo-ui", "public")
     ]
     
     for path in additional_paths:

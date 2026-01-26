@@ -274,26 +274,23 @@ async def generate_files_to_frontend(task_id: str):
         return {"error": "No code files available for this task"}
     
     try:
-        from tools.file_ops import write_to_frontend
+        from tools.file_ops import generate_code_to_todo_ui
         
-        generated_files = []
-        for filename, content in task["code_files"].items():
-            result = write_to_frontend(f"generated/{task_id}/{filename}", content)
-            if result["status"] == "success":
-                generated_files.append({
-                    "filename": filename,
-                    "path": result["file_path"],
-                    "size": result["size_bytes"]
-                })
-            else:
-                return {"error": f"Failed to write {filename}: {result['error']}"}
+        # Generate files directly into todo-ui
+        result = generate_code_to_todo_ui(task_id, task["code_files"])
         
-        return {
-            "status": "success",
-            "task_id": task_id,
-            "generated_files": generated_files,
-            "message": f"Generated {len(generated_files)} files for task: {task['title']}"
-        }
+        if result["status"] in ["success", "partial_success"]:
+            logger.info(f"Generated {result['total_generated']} files successfully")
+            return {
+                "status": "success",
+                "task_id": task_id,
+                "generated_files": result["generated_files"],
+                "generated_dir": result["generated_dir"],
+                "message": f"Generated {result['total_generated']} files for task: {task['title']} in todo-ui/{result['generated_dir']}"
+            }
+        else:
+            logger.error(f"Failed to generate files: {result.get('error', 'Unknown error')}")
+            return {"error": f"Failed to generate files: {result.get('error', 'Unknown error')}"}
         
     except Exception as e:
         return {"error": f"Failed to generate files: {str(e)}"}

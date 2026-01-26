@@ -41,9 +41,9 @@ cd vocalCommit/frontend
 npm run dev
 ```
 
-#### Terminal 3 - Todo UI
+#### Terminal 3 - Todo UI (now inside orchestrator)
 ```bash
-cd vocalCommit/todo-ui
+cd vocalCommit/orchestrator/todo-ui
 npm run dev
 ```
 
@@ -84,9 +84,9 @@ npm run dev
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │  Voice Interface│    │   Orchestrator   │    │    Todo UI      │
 │   (React/Vite)  │◄──►│  (FastAPI/WS)    │◄──►│  (React/Vite)   │
-│   Port: 5173    │    │   Port: 8000     │    │   Port: 5174    │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                              │
+│   Port: 5173    │    │   Port: 8000     │    │ Port: 5174      │
+└─────────────────┘    └──────────────────┘    │ (inside orch.)  │
+                              │                 └─────────────────┘
                               ▼
                     ┌──────────────────┐
                     │   Agent System   │
@@ -135,7 +135,7 @@ LOG_LEVEL=INFO
 
 ### File Watching
 
-The system automatically watches `vocalCommit/todo-ui/src` for changes. Configure paths in:
+The system automatically watches `vocalCommit/orchestrator/todo-ui/src` for changes. Configure paths in:
 ```python
 # vocalCommit/orchestrator/tools/ui_file_watcher.py
 ```
@@ -163,8 +163,8 @@ npm install
 
 **3. Missing Dependencies**
 ```bash
-# Todo UI missing uuid
-cd vocalCommit/todo-ui
+# Todo UI missing uuid (now inside orchestrator)
+cd vocalCommit/orchestrator/todo-ui
 npm install uuid @types/uuid
 ```
 
@@ -204,7 +204,7 @@ npm run dev
 **Restart Todo UI Only:**
 ```bash
 # Stop: Ctrl+C in todo-ui terminal
-cd vocalCommit/todo-ui
+cd vocalCommit/orchestrator/todo-ui
 npm run dev
 ```
 
@@ -228,7 +228,13 @@ vocalCommit/
 │   │   └── ui_file_watcher.py # UI file monitoring
 │   ├── utils/                 # Helper utilities
 │   ├── requirements.txt       # Python dependencies
-│   └── start_server.sh        # Backend startup script
+│   ├── start_server.sh        # Backend startup script
+│   └── todo-ui/               # Todo Management Interface (moved here)
+│       ├── src/
+│       │   ├── App.tsx        # Main todo application
+│       │   ├── App.css        # Styling
+│       │   └── main.tsx
+│       └── package.json
 ├── frontend/                  # Voice Interface
 │   ├── src/
 │   │   ├── components/
@@ -236,12 +242,6 @@ vocalCommit/
 │   │   ├── App.tsx
 │   │   └── main.tsx
 │   └── package.json
-└── todo-ui/                   # Todo Management Interface
-    ├── src/
-    │   ├── App.tsx            # Main todo application
-    │   ├── App.css            # Styling
-    │   └── main.tsx
-    └── package.json
 ```
 
 ## 🔄 Development Workflow

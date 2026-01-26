@@ -104,7 +104,7 @@ class PMAgent:
                     "assigned_agents": ["dev_agent"],
                     "ai_insights": response.text[:500] + "..." if len(response.text) > 500 else response.text,
                     "is_ui_editing": is_ui_editing,
-                    "target_files": ai_response.get("target_files", ["todo-ui/src/App.tsx"] if is_ui_editing else [])
+                    "target_files": ai_response.get("target_files", ["src/App.tsx"] if is_ui_editing else [])
                 }
                 
             except (json.JSONDecodeError, AttributeError) as e:
@@ -141,7 +141,7 @@ class PMAgent:
                 "assigned_agents": ["dev_agent"],
                 "ai_powered": False,
                 "is_ui_editing": True,
-                "target_files": ["todo-ui/src/App.tsx", "todo-ui/src/App.css"]
+                "target_files": ["src/App.tsx", "src/App.css"]
             }
         else:
             plan = {
@@ -180,7 +180,7 @@ class PMAgent:
             "assigned_agents": ["dev_agent"],
             "ai_insights": text[:300] + "..." if len(text) > 300 else text,
             "is_ui_editing": is_ui_editing,
-            "target_files": ["todo-ui/src/App.tsx"] if is_ui_editing else []
+            "target_files": ["src/App.tsx"] if is_ui_editing else []
         }
     
     def _extract_steps(self, text: str, is_ui_editing: bool = False) -> list:
