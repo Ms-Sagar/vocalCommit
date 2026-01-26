@@ -51,6 +51,8 @@ const VoiceInterface: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const [approvalFeedback, setApprovalFeedback] = useState<{[key: string]: string}>({});
+  const [processingApprovals, setProcessingApprovals] = useState<{[key: string]: boolean}>({});
+  const [generatingFiles, setGeneratingFiles] = useState<{[key: string]: boolean}>({});
   const [editingWorkflow, setEditingWorkflow] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     transcript: '',
@@ -62,6 +64,35 @@ const VoiceInterface: React.FC = () => {
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Helper functions for display names
+  const getStepDisplayName = (step: string): string => {
+    const stepMap: { [key: string]: string } = {
+      'pm_completed': 'PM Analysis Complete',
+      'dev_completed': 'Development Complete',
+      'security_completed': 'Security Review Complete',
+      'devops_completed': 'DevOps Review Complete',
+      'pm_analysis': 'PM Analysis',
+      'dev_implementation': 'Development Implementation',
+      'security_review': 'Security Review',
+      'devops_deployment': 'DevOps Deployment'
+    };
+    
+    return stepMap[step] || step.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const getNextAgentDisplayName = (nextStep: string): string => {
+    const agentMap: { [key: string]: string } = {
+      'dev_agent': 'Development Agent',
+      'security_agent': 'Security Agent',
+      'devops_agent': 'DevOps Agent',
+      'pm_agent': 'Project Manager Agent',
+      'completion': 'Task Completion',
+      'manual_review': 'Manual Review'
+    };
+    
+    return agentMap[nextStep] || nextStep.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
 
   useEffect(() => {
     // Initialize WebSocket connection
@@ -186,7 +217,7 @@ const VoiceInterface: React.FC = () => {
       const existing = prev.find(w => w.task_id === response.task_id);
       
       if (!existing) {
-        // Create new workflow
+        // Create new workflow with dynamic steps based on response
         const newWorkflow: TaskWorkflow = {
           task_id: response.task_id!,
           transcript: response.transcript || 'Unknown task',
@@ -215,17 +246,35 @@ const VoiceInterface: React.FC = () => {
           const updated = { ...workflow };
           
           if (response.status === 'pending_approval') {
-            updated.steps[0].status = 'completed';
-            updated.steps[1].status = 'active';
-            updated.current_step = 1;
+            // Handle different types of approvals
+            if (response.agent === 'PM Agent') {
+              updated.steps[0].status = 'completed';
+              updated.steps[1].status = 'active';
+              updated.current_step = 1;
+            } else if (response.agent === 'Dev Agent') {
+              updated.steps[2].status = 'completed';
+              updated.steps[3].status = 'active';
+              updated.current_step = 3;
+            }
           } else if (response.status === 'completed') {
-            updated.steps[1].status = 'approved';
-            updated.steps[2].status = 'completed';
-            updated.steps[3].status = 'completed';
-            updated.current_step = 3;
+            // Mark all steps as completed
+            updated.steps.forEach((step, index) => {
+              if (index <= updated.current_step + 1) {
+                step.status = index === updated.current_step ? 'approved' : 'completed';
+              }
+            });
+            updated.steps[updated.steps.length - 1].status = 'completed';
+            updated.current_step = updated.steps.length - 1;
           } else if (response.status === 'rejected') {
-            updated.steps[1].status = 'rejected';
-            updated.current_step = 1;
+            updated.steps[updated.current_step].status = 'rejected';
+          } else if (response.status === 'approval_confirmed') {
+            // Handle approval confirmation
+            const currentStep = updated.current_step;
+            if (currentStep < updated.steps.length - 1) {
+              updated.steps[currentStep].status = 'approved';
+              updated.steps[currentStep + 1].status = 'active';
+              updated.current_step = currentStep + 1;
+            }
           }
 
           return updated;
@@ -260,11 +309,22 @@ const VoiceInterface: React.FC = () => {
   };
 
   const handleApproval = async (taskId: string, action: 'approve' | 'reject') => {
+    // Prevent multiple clicks
+    if (processingApprovals[taskId]) {
+      return;
+    }
+
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      // Set processing state immediately
+      setProcessingApprovals(prev => ({
+        ...prev,
+        [taskId]: true
+      }));
+
       // Show immediate feedback
       setApprovalFeedback(prev => ({
         ...prev,
-        [taskId]: action === 'approve' ? 'Processing approval...' : 'Processing rejection...'
+        [taskId]: action === 'approve' ? '🔄 Processing approval...' : '🔄 Processing rejection...'
       }));
 
       const message: VoiceMessage = {
@@ -275,73 +335,118 @@ const VoiceInterface: React.FC = () => {
       
       wsRef.current.send(JSON.stringify(message));
       
-      // Update workflow status immediately
+      // Update workflow status immediately for visual feedback
       setActiveWorkflows(prev => prev.map(workflow => {
         if (workflow.task_id !== taskId) return workflow;
         
         const updated = { ...workflow };
         if (action === 'approve') {
-          updated.steps[1].status = 'approved';
-          updated.steps[2].status = 'active';
-          updated.current_step = 2;
-          setApprovalFeedback(prev => ({
-            ...prev,
-            [taskId]: '✅ Approved! Proceeding to development...'
-          }));
+          // Find current step and advance it
+          const currentStepIndex = updated.current_step;
+          if (currentStepIndex < updated.steps.length - 1) {
+            updated.steps[currentStepIndex].status = 'approved';
+            updated.steps[currentStepIndex + 1].status = 'active';
+            updated.current_step = currentStepIndex + 1;
+          }
         } else {
-          updated.steps[1].status = 'rejected';
-          setApprovalFeedback(prev => ({
-            ...prev,
-            [taskId]: '❌ Task rejected and removed from queue'
-          }));
+          // Mark current step as rejected
+          updated.steps[updated.current_step].status = 'rejected';
         }
         return updated;
       }));
       
-      // Refresh approvals after a short delay
+      // Set a longer timeout for better user experience
       setTimeout(() => {
+        // Update feedback based on action
+        setApprovalFeedback(prev => ({
+          ...prev,
+          [taskId]: action === 'approve' 
+            ? '✅ Approved! Processing with next agent...' 
+            : '❌ Task rejected and suspended'
+        }));
+        
+        // Refresh approvals to get updated state
         fetchPendingApprovals();
-        // Clear feedback after 3 seconds
+        
+        // Clear processing and feedback after longer delay
         setTimeout(() => {
+          setProcessingApprovals(prev => {
+            const updated = { ...prev };
+            delete updated[taskId];
+            return updated;
+          });
+          
           setApprovalFeedback(prev => {
             const updated = { ...prev };
             delete updated[taskId];
             return updated;
           });
-        }, 3000);
-      }, 1000);
+        }, 4000); // Increased to 4 seconds for better visibility
+      }, 1500); // Increased initial delay
     }
   };
 
   const generateFilesForTask = async (taskId: string) => {
+    // Prevent multiple clicks
+    if (generatingFiles[taskId]) {
+      return;
+    }
+
     try {
+      // Set generating state
+      setGeneratingFiles(prev => ({
+        ...prev,
+        [taskId]: true
+      }));
+
+      // Show loading state
+      setMessages(prev => [...prev, {
+        status: 'info',
+        agent: 'File Generator',
+        response: `🔄 **Generating Files...**\n\nProcessing task ${taskId}...`,
+        transcript: `Generate files for ${taskId}`
+      }]);
+
       const response = await fetch(`http://localhost:8000/generate-files/${taskId}`, {
         method: 'POST'
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const result = await response.json();
       
       if (result.status === 'success') {
         setMessages(prev => [...prev, {
           status: 'success',
           agent: 'File Generator',
-          response: `✅ **Files Generated Successfully!**\n\n${result.message}\n\n**Generated Files:**\n${result.generated_files.map((f: any) => `• ${f.filename} (${f.size} bytes)`).join('\n')}`,
+          response: `✅ **Files Generated Successfully!**\n\n${result.message}\n\n**Generated Files:**\n${result.generated_files.map((f: any) => `• ${f.filename} (${f.size} bytes)`).join('\n')}\n\n**Location:** ${result.generated_dir || 'todo-ui/src/generated'}`,
           transcript: `Generate files for ${taskId}`
         }]);
       } else {
         setMessages(prev => [...prev, {
           status: 'error',
           agent: 'File Generator',
-          response: `❌ **File Generation Failed**\n\n${result.error}`,
+          response: `❌ **File Generation Failed**\n\n${result.error || 'Unknown error occurred'}`,
           transcript: `Generate files for ${taskId}`
         }]);
       }
     } catch (error) {
+      console.error('Generate files error:', error);
       setMessages(prev => [...prev, {
         status: 'error',
         agent: 'File Generator',
-        response: `❌ **File Generation Error**\n\n${error}`,
+        response: `❌ **File Generation Error**\n\n${error instanceof Error ? error.message : String(error)}`,
         transcript: `Generate files for ${taskId}`
       }]);
+    } finally {
+      // Clear generating state
+      setGeneratingFiles(prev => {
+        const updated = { ...prev };
+        delete updated[taskId];
+        return updated;
+      });
     }
   };
 
@@ -508,14 +613,18 @@ const VoiceInterface: React.FC = () => {
           <h3>⏳ Pending Approvals ({pendingApprovals.length})</h3>
           <div className="approvals-container">
             {pendingApprovals.map((approval) => (
-              <div key={approval.task_id} className="approval-card">
+              <div key={approval.task_id} className={`approval-card ${approval.step}`}>
                 <div className="approval-header">
                   <h4>Task: {approval.transcript}</h4>
                   <span className="task-id">ID: {approval.task_id}</span>
+                  <span className={`approval-type ${approval.step}`}>
+                    {getStepDisplayName(approval.step)}
+                  </span>
                 </div>
                 <div className="approval-details">
-                  <p><strong>Current Step:</strong> {approval.step.replace('_', ' ')}</p>
-                  <p><strong>Next Agent:</strong> {approval.next_step.replace('_', ' ')}</p>
+                  <p><strong>Current Step:</strong> {getStepDisplayName(approval.step)}</p>
+                  <p><strong>Next Agent:</strong> {getNextAgentDisplayName(approval.next_step)}</p>
+                  <p><strong>Status:</strong> Waiting for manual approval to proceed</p>
                 </div>
                 <div className="approval-actions">
                   <button 
@@ -527,16 +636,16 @@ const VoiceInterface: React.FC = () => {
                   <button 
                     className="approve-btn"
                     onClick={() => handleApproval(approval.task_id, 'approve')}
-                    disabled={!!approvalFeedback[approval.task_id]}
+                    disabled={processingApprovals[approval.task_id] || !!approvalFeedback[approval.task_id]}
                   >
-                    ✅ Approve
+                    {processingApprovals[approval.task_id] ? '🔄 Processing...' : '✅ Approve'}
                   </button>
                   <button 
                     className="reject-btn"
                     onClick={() => handleApproval(approval.task_id, 'reject')}
-                    disabled={!!approvalFeedback[approval.task_id]}
+                    disabled={processingApprovals[approval.task_id] || !!approvalFeedback[approval.task_id]}
                   >
-                    ❌ Reject
+                    {processingApprovals[approval.task_id] ? '🔄 Processing...' : '❌ Reject'}
                   </button>
                 </div>
                 
@@ -633,8 +742,9 @@ const VoiceInterface: React.FC = () => {
                       <button 
                         className="generate-files-btn"
                         onClick={() => generateFilesForTask(message.task_id!)}
+                        disabled={generatingFiles[message.task_id!]}
                       >
-                        📁 Generate Files to Frontend
+                        {generatingFiles[message.task_id!] ? '🔄 Generating...' : '📁 Generate Files to Frontend'}
                       </button>
                     )}
                   </div>

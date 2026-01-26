@@ -121,6 +121,18 @@ completed_tasks = {}
 # Store manual todos (separate from admin workflows)
 manual_todos = {}
 
+# Store suspended workflows (rejected workflows that should not reappear)
+suspended_workflows = set()
+
+# Store workflow states for better tracking
+workflow_states = {
+    "pending": {},      # Waiting for approval
+    "active": {},       # Currently being processed
+    "completed": {},    # Successfully completed
+    "rejected": {},     # Rejected and suspended
+    "failed": {}        # Failed during execution
+}
+
 @app.get("/tasks")
 async def get_all_tasks():
     """Get manual todos only (not admin workflows)."""
@@ -128,27 +140,39 @@ async def get_all_tasks():
 
 @app.get("/admin-workflows")
 async def get_admin_workflows():
-    """Get admin workflows (pending and completed)."""
+    """Get active admin workflows only (pending and in-progress, not completed or rejected)."""
     workflows = []
     
-    # Add pending workflows
+    # Add pending workflows (waiting for approval)
     for task_id, data in pending_approvals.items():
+        if task_id not in suspended_workflows:  # Don't show suspended workflows
+            workflows.append({
+                "id": task_id,
+                "title": data["transcript"],
+                "description": f"Task plan created, waiting for approval to proceed to {data['next_step'].replace('_', ' ')}",
+                "status": "pending_approval",
+                "priority": "medium",
+                "createdAt": "2024-01-23T" + str(len(workflows)).zfill(2) + ":00:00Z",
+                "updatedAt": "2024-01-23T" + str(len(workflows)).zfill(2) + ":00:00Z",
+                "step": data["step"],
+                "next_step": data["next_step"],
+                "plan": data.get("plan", {}),
+                "workflow_type": "active"
+            })
+    
+    # Add active workflows (currently being processed)
+    for task_id, data in workflow_states["active"].items():
         workflows.append({
             "id": task_id,
             "title": data["transcript"],
-            "description": f"Task plan created, waiting for approval to proceed to {data['next_step'].replace('_', ' ')}",
-            "status": "pending_approval",
-            "priority": "medium",
-            "createdAt": "2024-01-23T" + str(len(workflows)).zfill(2) + ":00:00Z",
-            "updatedAt": "2024-01-23T" + str(len(workflows)).zfill(2) + ":00:00Z",
-            "step": data["step"],
-            "next_step": data["next_step"],
-            "plan": data.get("plan", {})
+            "description": f"Currently processing: {data.get('current_step', 'Unknown step')}",
+            "status": "in_progress",
+            "priority": data.get("priority", "medium"),
+            "createdAt": data.get("createdAt", "2024-01-23T10:00:00Z"),
+            "updatedAt": data.get("updatedAt", "2024-01-23T10:00:00Z"),
+            "step": data.get("step", "processing"),
+            "workflow_type": "active"
         })
-    
-    # Add completed workflows
-    for task_id, data in completed_tasks.items():
-        workflows.append(data)
     
     return {"workflows": workflows}
 
@@ -263,7 +287,7 @@ async def edit_workflow(task_id: str, workflow_data: dict):
         }
     }
 
-@app.get("/generate-files/{task_id}")
+@app.post("/generate-files/{task_id}")
 async def generate_files_to_frontend(task_id: str):
     """Generate files from a completed task to the frontend."""
     if task_id not in completed_tasks:
@@ -342,6 +366,26 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         if command_type == "approval":
             return await handle_approval(transcript, task_id)
         
+        # Check if this workflow was previously rejected/suspended
+        if task_id in suspended_workflows:
+            return {
+                "status": "suspended",
+                "agent": "System",
+                "response": f"🚫 **Workflow Suspended**\n\nThis workflow was previously rejected and has been suspended.\n\n**Command**: {transcript}\n\n**Action**: No new workflow created\n\n💡 **Tip**: Modify your command to create a new workflow.",
+                "transcript": transcript,
+                "task_id": task_id
+            }
+        
+        # Check if there's already a pending workflow for this command
+        if task_id in pending_approvals:
+            return {
+                "status": "duplicate",
+                "agent": "System", 
+                "response": f"⚠️ **Duplicate Workflow**\n\nA workflow for this command is already pending approval.\n\n**Command**: {transcript}\n\n**Task ID**: {task_id}\n\n**Action**: Please approve or reject the existing workflow first.",
+                "transcript": transcript,
+                "task_id": task_id
+            }
+        
         # Check if this is a UI editing command
         ui_keywords = ['todo ui', 'todo-ui', 'ui', 'interface', 'frontend', 'change ui', 'modify ui', 'update ui']
         is_ui_command = any(keyword in transcript.lower() for keyword in ui_keywords)
@@ -366,6 +410,17 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
             "plan": plan,
             "transcript": transcript,
             "next_step": "dev_agent",
+            "is_ui_editing": is_ui_command,
+            "created_at": "2024-01-23T10:00:00Z",
+            "requires_approval": True
+        }
+        
+        # Add to pending workflow state
+        workflow_states["pending"][task_id] = {
+            "transcript": transcript,
+            "plan": plan,
+            "status": "pending_approval",
+            "created_at": "2024-01-23T10:00:00Z",
             "is_ui_editing": is_ui_command
         }
         
@@ -438,6 +493,20 @@ async def approve_task(task_id: str) -> dict:
     approval_data = pending_approvals[task_id]
     current_step = approval_data["step"]
     
+    # Move from pending to active state
+    workflow_states["active"][task_id] = {
+        "transcript": approval_data["transcript"],
+        "plan": approval_data.get("plan", {}),
+        "status": "in_progress",
+        "approved_at": "2024-01-23T10:00:00Z",
+        "current_step": "dev_agent",
+        "is_ui_editing": approval_data.get("is_ui_editing", False)
+    }
+    
+    # Remove from pending state
+    if task_id in workflow_states["pending"]:
+        del workflow_states["pending"][task_id]
+    
     try:
         if current_step == "pm_completed" and approval_data["next_step"] == "dev_agent":
             # Send immediate approval confirmation
@@ -498,6 +567,19 @@ async def approve_task(task_id: str) -> dict:
                 }
                 
                 completed_tasks[task_id] = task_data
+                
+                # Move from active to completed state
+                workflow_states["completed"][task_id] = {
+                    "transcript": approval_data["transcript"],
+                    "status": "completed",
+                    "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
+                    "type": "ui_editing",
+                    "modified_files": modified_files
+                }
+                
+                # Remove from active and pending states
+                if task_id in workflow_states["active"]:
+                    del workflow_states["active"][task_id]
                 del pending_approvals[task_id]
                 
                 return {
@@ -544,6 +626,19 @@ async def approve_task(task_id: str) -> dict:
                 }
                 
                 completed_tasks[task_id] = task_data
+                
+                # Move from active to completed state
+                workflow_states["completed"][task_id] = {
+                    "transcript": approval_data["transcript"],
+                    "status": "completed",
+                    "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
+                    "type": "code_generation",
+                    "files": list(code_output["files"].keys())
+                }
+                
+                # Remove from active and pending states
+                if task_id in workflow_states["active"]:
+                    del workflow_states["active"][task_id]
                 del pending_approvals[task_id]
                 
                 return {
@@ -577,7 +672,7 @@ async def approve_task(task_id: str) -> dict:
         }
 
 async def reject_task(task_id: str) -> dict:
-    """Reject a pending task."""
+    """Reject a pending task and suspend the workflow."""
     if task_id not in pending_approvals:
         return {
             "status": "error",
@@ -585,16 +680,92 @@ async def reject_task(task_id: str) -> dict:
         }
     
     approval_data = pending_approvals[task_id]
+    
+    # Move to rejected state and suspend the workflow
+    workflow_states["rejected"][task_id] = {
+        "transcript": approval_data["transcript"],
+        "plan": approval_data.get("plan", {}),
+        "status": "rejected",
+        "rejected_at": "2024-01-23T10:00:00Z",
+        "reason": "Manual rejection by user",
+        "is_ui_editing": approval_data.get("is_ui_editing", False)
+    }
+    
+    # Add to suspended workflows to prevent reappearance
+    suspended_workflows.add(task_id)
+    
+    # Remove from pending approvals and pending state
     del pending_approvals[task_id]
+    if task_id in workflow_states["pending"]:
+        del workflow_states["pending"][task_id]
+    
+    logger.info(f"Workflow {task_id} rejected and suspended: {approval_data['transcript']}")
     
     return {
         "status": "rejected",
         "task_id": task_id,
         "agent": "System",
-        "response": f"❌ **Task Rejected**\n\nTask '{approval_data['transcript']}' has been rejected and removed from the queue.\n\n🗑️ **Action**: Task workflow terminated\n📝 **Reason**: Manual rejection by user",
+        "response": f"❌ **Task Rejected & Suspended**\n\nTask '{approval_data['transcript']}' has been rejected and suspended.\n\n🚫 **Action**: Workflow terminated and will not reappear\n📝 **Reason**: Manual rejection by user\n\n💡 **Note**: Modify your voice command to create a new workflow if needed.",
         "transcript": approval_data["transcript"]
     }
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/completed-workflows")
+async def get_completed_workflows():
+    """Get completed workflows (for history/archive view)."""
+    workflows = []
+    
+    # Add completed workflows
+    for task_id, data in completed_tasks.items():
+        workflows.append(data)
+    
+    # Add rejected workflows
+    for task_id, data in workflow_states["rejected"].items():
+        workflows.append(data)
+    
+    return {"workflows": workflows}
+
+@app.get("/workflow-stats")
+async def get_workflow_stats():
+    """Get workflow statistics."""
+    return {
+        "pending": len(pending_approvals),
+        "active": len(workflow_states["active"]),
+        "completed": len(completed_tasks),
+        "rejected": len(workflow_states["rejected"]),
+        "suspended": len(suspended_workflows),
+        "failed": len(workflow_states["failed"])
+    }
+@app.post("/clear-suspended/{task_id}")
+async def clear_suspended_workflow(task_id: str):
+    """Clear a specific suspended workflow to allow it to be recreated."""
+    if task_id in suspended_workflows:
+        suspended_workflows.remove(task_id)
+        if task_id in workflow_states["rejected"]:
+            del workflow_states["rejected"][task_id]
+        
+        return {
+            "status": "success",
+            "message": f"Workflow {task_id} has been cleared from suspended list",
+            "task_id": task_id
+        }
+    else:
+        return {
+            "status": "error",
+            "message": f"Workflow {task_id} is not in suspended list"
+        }
+
+@app.post("/clear-all-suspended")
+async def clear_all_suspended_workflows():
+    """Clear all suspended workflows."""
+    count = len(suspended_workflows)
+    suspended_workflows.clear()
+    workflow_states["rejected"].clear()
+    
+    return {
+        "status": "success",
+        "message": f"Cleared {count} suspended workflows",
+        "cleared_count": count
+    }
