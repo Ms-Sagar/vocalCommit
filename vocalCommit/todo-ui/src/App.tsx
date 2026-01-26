@@ -1,7 +1,7 @@
-tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { produce } from 'immer'; // For immutable state updates
+// import { produce } from 'immer'; // For immutable state updates - REMOVED: Fixes "Failed to resolve import 'immer'" error
 import { v4 as uuidv4 } from 'uuid'; // For generating temporary IDs
+import './App.css'; // Import the CSS styles
 
 // --- Types ---
 type Theme = 'light' | 'dark';
@@ -375,27 +375,19 @@ function App() {
     }
 
     const tempId = `optimistic-${uuidv4()}`; // Temporary ID for optimistic UI
+    const optimisticTodo: Todo = { ...newTodoInput, id: tempId, status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
 
     await handleCrudOperation(
       tempId, // Use tempId for tracking the operation
       () => mockApi.addTodo(newTodoInput),
       () => {
         // Optimistic update
-        setTodos(
-          produce((draft) => {
-            draft.unshift({ ...newTodoInput, id: tempId, status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-          })
-        );
+        setTodos((prevTodos) => [optimisticTodo, ...prevTodos]);
       },
       (newTodo) => {
         // On success, replace the optimistic todo with the real one
-        setTodos(
-          produce((draft) => {
-            const index = draft.findIndex((t) => t.id === tempId);
-            if (index !== -1) {
-              draft[index] = newTodo;
-            }
-          })
+        setTodos((prevTodos) =>
+          prevTodos.map((t) => (t.id === tempId ? newTodo : t))
         );
         setNewTodoInput({ title: '', description: '', priority: 'medium' });
         setIsModalOpen(false);
@@ -403,11 +395,7 @@ function App() {
       },
       () => {
         // On failure, revert optimistic update
-        setTodos(
-          produce((draft) => {
-            return draft.filter((t) => t.id !== tempId);
-          })
-        );
+        setTodos((prevTodos) => prevTodos.filter((t) => t.id !== tempId));
       },
       true // This is an add operation
     );
@@ -422,14 +410,12 @@ function App() {
       () => mockApi.updateTodo(id, { status: newStatus }),
       () => {
         // Optimistic update
-        setTodos(
-          produce((draft) => {
-            const todo = draft.find((t) => t.id === id);
-            if (todo) {
-              todo.status = newStatus;
-              todo.updatedAt = new Date().toISOString();
-            }
-          })
+        setTodos((prevTodos) =>
+          prevTodos.map((todo) =>
+            todo.id === id
+              ? { ...todo, status: newStatus, updatedAt: new Date().toISOString() }
+              : todo
+          )
         );
       },
       () => {
@@ -439,14 +425,12 @@ function App() {
       },
       () => {
         // On failure, revert to original status
-        setTodos(
-          produce((draft) => {
-            const todo = draft.find((t) => t.id === id);
-            if (todo && originalTodo) {
-              todo.status = originalTodo.status;
-              todo.updatedAt = originalTodo.updatedAt;
-            }
-          })
+        setTodos((prevTodos) =>
+          prevTodos.map((todo) =>
+            todo.id === id && originalTodo
+              ? { ...todo, status: originalTodo.status, updatedAt: originalTodo.updatedAt }
+              : todo
+          )
         );
       }
     );
@@ -461,11 +445,7 @@ function App() {
       () => mockApi.deleteTodo(id),
       () => {
         // Optimistic update
-        setTodos(
-          produce((draft) => {
-            return draft.filter((t) => t.id !== id);
-          })
-        );
+        setTodos((prevTodos) => prevTodos.filter((t) => t.id !== id));
       },
       () => {
         // On success, state is already updated optimistically
@@ -473,12 +453,10 @@ function App() {
       },
       () => {
         // On failure, re-add the todo
-        setTodos(
-          produce((draft) => {
-            draft.unshift(originalTodo); // Re-add to the start or its original position
-            draft.sort((a: Todo, b: Todo) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Maintain order
-          })
-        );
+        setTodos((prevTodos) => {
+          const newTodos = [originalTodo, ...prevTodos]; // Re-add to the start
+          return newTodos.sort((a: Todo, b: Todo) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); // Maintain order
+        });
       }
     );
   }, [todos, addToast, handleCrudOperation]);
