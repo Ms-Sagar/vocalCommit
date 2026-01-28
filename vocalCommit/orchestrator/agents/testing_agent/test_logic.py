@@ -166,8 +166,9 @@ class TestingAgent:
         logger.info(f"Running functional validation for: {user_instruction}")
         
         try:
-            import google.generativeai as genai
+            import google.genai as genai
             from core.config import settings
+            from tools.rate_limiter import wait_for_gemini_api
             
             if not settings.gemini_api_key:
                 logger.warning("No Gemini API key found for functional validation")
@@ -176,8 +177,7 @@ class TestingAgent:
                     "message": "Functional validation skipped - no AI API key"
                 }
             
-            genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel('models/gemini-2.5-flash')
+            client = genai.Client(api_key=settings.gemini_api_key)
             
             # Read the modified files to analyze
             file_contents = {}
@@ -231,7 +231,15 @@ Respond in JSON format:
     "recommendations": ["list of recommendations if any"]
 }}"""
             
-            response = model.generate_content(prompt)
+            # Rate limiting before API call
+            wait_time = wait_for_gemini_api()
+            if wait_time > 0:
+                logger.info(f"Testing Agent waited {wait_time:.1f} seconds due to rate limiting")
+            
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt
+            )
             
             # Try to parse JSON response
             try:

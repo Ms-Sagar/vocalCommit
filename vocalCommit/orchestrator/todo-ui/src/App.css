@@ -7,6 +7,7 @@
   --bg-modal-overlay: rgba(0, 0, 0, 0.5);
   --bg-modal-footer: #f8f9fa;
   --bg-light-hover: #f8f9fa; /* Used for close-btn hover */
+  --bg-polling-status: rgba(0, 0, 0, 0.2); /* Background for polling status in header */
 
   /* Text Colors */
   --text-primary: #495057;
@@ -23,6 +24,7 @@
   --border-dashed: #dee2e6;
   --border-header-btn: rgba(255, 255, 255, 0.3);
   --border-spinner-base: rgba(255, 255, 255, 0.3);
+  --border-spinner-top: var(--color-primary-accent); /* Top border for spinner */
 
   /* Accent & Action Colors */
   --color-primary-accent: #007bff; /* Blue */
@@ -101,6 +103,7 @@ body.dark-theme {
   --bg-modal-overlay: rgba(0, 0, 0, 0.7);
   --bg-modal-footer: #2a2a4c;
   --bg-light-hover: #3a3a60;
+  --bg-polling-status: rgba(0, 0, 0, 0.3); /* Background for polling status in header (darker translucent) */
 
   /* Text Colors */
   --text-primary: #e0e0e0;
@@ -117,6 +120,7 @@ body.dark-theme {
   --border-dashed: #4a4a70;
   --border-header-btn: rgba(255, 255, 255, 0.2);
   --border-spinner-base: rgba(255, 255, 255, 0.2);
+  --border-spinner-top: var(--color-primary-accent); /* Top border for spinner */
 
   /* Accent & Action Colors (Darker versions if needed, or keep same) */
   --color-primary-accent: #66b3ff; /* Lighter blue for visibility */
@@ -144,7 +148,7 @@ body.dark-theme {
   --file-tag-bg: #3a3a60;
   --file-tag-text: var(--text-primary);
   --dependency-tag-bg: #4d4d7f;
-  --dependency-tag-text: var(--text-dependency-tag);
+  --dependency-tag-text: var(--color-info-accent);
 
   --error-banner-bg: #3a1c1d;
   --error-banner-text: #f0a3a7;
@@ -187,12 +191,13 @@ body.dark-theme {
   --status-in-progress-color: var(--color-warning-accent);
 }
 
-/* Apply theme background to body */
+/* Apply theme background and default text color to body */
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
   background-color: var(--bg-app);
+  color: var(--text-primary); /* Default text color for the app */
 }
 
 .app {
@@ -200,9 +205,7 @@ body {
   margin: 0 auto;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  background-color: var(--bg-app);
   min-height: 100vh;
-  color: var(--text-primary); /* Default text color for the app */
 }
 
 .header {
@@ -559,7 +562,7 @@ body {
 .admin-link {
   display: inline-block;
   background: var(--admin-link-bg);
-  color: var(--text-light); /* Changed to text-light as admin link is usually on a colored background */
+  color: var(--text-light);
   padding: 10px 20px;
   border-radius: 8px;
   text-decoration: none;
@@ -915,8 +918,6 @@ body {
   cursor: not-allowed;
 }
 
-/* Todo Actions (duplicated, keep the one closer to original source but ensure variables are used) */
-/* This section was duplicated in the original. Consolidating to the one below for clarity. */
 .status-controls {
   display: flex;
   align-items: center;

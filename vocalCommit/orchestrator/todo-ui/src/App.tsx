@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // For generating temporary IDs
 import './App.css'; // Import the CSS styles
+import { useTheme } from './hooks/useTheme'; // Import the useTheme hook
 
 // --- Types ---
 type Filter = 'all' | 'completed' | 'active';
@@ -247,22 +248,8 @@ function App() {
   const [globalError, setGlobalError] = useState<string | null>(null); // For persistent errors
   const [toasts, setToasts] = useState<Toast[]>([]); // For transient success/error messages
 
-  // Dark mode state and persistence
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    const storedTheme = localStorage.getItem('theme');
-    // Default to dark mode if user's system prefers it and no theme is stored
-    if (storedTheme) {
-      return storedTheme === 'dark';
-    }
-    // Check if the user's system prefers dark mode
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
-
-  // Apply dark mode class to body and save preference to localStorage
-  useEffect(() => {
-    document.body.classList.toggle('dark-mode', isDarkMode);
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-  }, [isDarkMode]);
+  // Use the useTheme hook to manage dark mode state and functionality
+  const { theme, toggleTheme } = useTheme();
 
   // Tracks active optimistic CRUD operations to pause polling
   const activeCrudOperations = useRef(new Set<string>());
@@ -484,7 +471,7 @@ function App() {
   const totalTodosCount = todos.length;
 
   return (
-    <div className="app">
+    <div className={`app ${theme}`}> {/* Apply the theme class to the root div */}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       <header className="header">
@@ -498,14 +485,14 @@ function App() {
               <Spinner size="1em" color="var(--text-color-secondary)" /> Refreshing...
             </div>
           )}
-          {/* Theme Toggle Button with persistence and proper styling */}
+          {/* Theme Toggle Button using useTheme hook */}
           <button
             className="theme-toggle-btn"
-            onClick={() => setIsDarkMode(prev => !prev)}
-            aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
-            title={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
+            onClick={toggleTheme} // Use toggleTheme from the hook
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
           >
-            {isDarkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+            {theme === 'dark' ? '☀️' : '🌙'} {/* Just icons for the circular button */}
           </button>
           <button
             className="refresh-btn"

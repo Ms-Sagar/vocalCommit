@@ -89,6 +89,17 @@ async def shutdown_event():
         ui_watcher.stop_watching()
         logger.info("UI file watcher stopped")
 
+@app.get("/rate-limit-status")
+async def get_rate_limit_status():
+    """Get current Gemini API rate limiting status."""
+    from tools.rate_limiter import get_gemini_api_status
+    
+    status = get_gemini_api_status()
+    return {
+        "rate_limit_status": status,
+        "message": f"Remaining requests: {status['remaining_requests']}/5 per minute"
+    }
+
 @app.get("/ui-status")
 async def get_ui_status():
     """Get UI file watcher status and recent changes."""

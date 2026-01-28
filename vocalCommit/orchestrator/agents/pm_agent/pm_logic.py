@@ -24,29 +24,33 @@ class PMAgent:
         logger.info(f"PM Agent processing transcript with Gemini AI: {transcript} (UI Editing: {is_ui_editing})")
         
         try:
-            import google.generativeai as genai
+            import google.genai as genai
             from core.config import settings
+            from tools.rate_limiter import wait_for_gemini_api
             
             # Configure Gemini API
             if not settings.gemini_api_key:
                 logger.warning("No Gemini API key found, using fallback response")
                 return self._fallback_plan(transcript, is_ui_editing)
             
-            genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel('models/gemini-2.5-flash')
+            client = genai.Client(api_key=settings.gemini_api_key)
             
                 # Create specialized prompt based on task type
             if is_ui_editing:
                 prompt = f"""
-                As a Senior UI/UX Designer and Frontend Developer, analyze this UI modification request for a React Todo application:
+                As a Senior UI/UX Designer and Frontend Developer, analyze this UI modification request for a PRODUCTION React Todo application:
                 
                 Request: "{transcript}"
+                
+                CRITICAL: This is for a LIVE PRODUCTION SERVICE. Code will be deployed directly with automatic dependency management.
                 
                 Current Todo UI Structure:
                 - src/App.tsx: Main React component with todo logic
                 - src/App.css: Styling for all UI components
                 - src/index.css: Global styles
                 - src/components/: Additional React components
+                - src/hooks/: Custom React hooks
+                - src/context/: React context providers
                 
                 Current Features:
                 - Manual todo creation and management
@@ -63,18 +67,30 @@ class PMAgent:
                     "priority": "low/medium/high",
                     "estimated_effort": "e.g., 30 minutes, 1-2 hours",
                     "breakdown": ["step1", "step2", "step3", "step4"],
-                    "target_files": ["list of files that need modification"],
+                    "target_files": ["list of EXACT filenames - NO SENTENCES, NO DESCRIPTIONS"],
                     "dependencies": ["react", "css", etc],
                     "ui_considerations": "accessibility, responsiveness, UX notes"
                 }}
                 
-                IMPORTANT: For target_files, consider:
-                - If adding new UI elements or modifying layout: include both src/App.tsx AND src/App.css
-                - If adding dark mode/theming: include src/App.tsx, src/App.css, and potentially src/index.css
-                - If creating new components: include src/components/ComponentName.tsx and related CSS
-                - If modifying existing functionality: identify the specific files that need changes
+                FILENAME RULES FOR target_files:
+                - Use EXACT filenames only: "ThemeToggle.tsx", "useTheme.ts", "ThemeContext.tsx"
+                - NO sentences: ❌ "create a theme toggle component"
+                - NO descriptions: ❌ "component for theme switching"
+                - NO wildcards: ❌ "*.tsx", ❌ "all components"
+                - Follow naming conventions:
+                  * Components: "ComponentName.tsx"
+                  * Hooks: "useHookName.ts" 
+                  * Context: "ContextNameContext.tsx"
+                  * CSS: "ComponentName.css"
                 
-                Focus on practical, actionable steps and identify ALL files that need modification.
+                PRODUCTION CONSIDERATIONS:
+                - Code must be immediately deployable
+                - All functionality must be complete (no TODOs)
+                - Include proper error handling and accessibility
+                - Consider mobile responsiveness
+                - Use TypeScript best practices
+                
+                Focus on practical, actionable steps with EXACT filenames only.
                 """
             else:
                 prompt = f"""
@@ -93,7 +109,15 @@ class PMAgent:
                 Focus on practical, actionable steps for a development team.
                 """
             
-            response = model.generate_content(prompt)
+            # Rate limiting before API call
+            wait_time = wait_for_gemini_api()
+            if wait_time > 0:
+                logger.info(f"PM Agent waited {wait_time:.1f} seconds due to rate limiting")
+            
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt
+            )
             
             # Try to parse JSON response, fallback if needed
             try:
@@ -272,14 +296,20 @@ class PMAgent:
         if not is_ui_editing:
             return ai_suggested_files or []
         
-        # Start with AI suggestions if available
-        target_files = set(ai_suggested_files) if ai_suggested_files else set()
+        # Start with AI suggestions if available and sanitize them
+        target_files = set()
+        if ai_suggested_files:
+            for file in ai_suggested_files:
+                # Import the sanitize function
+                from agents.dev_agent.dev_logic import sanitize_filename
+                sanitized = sanitize_filename(file)
+                target_files.add(sanitized)
         
         # Analyze transcript for file requirements
         transcript_lower = transcript.lower()
         
         # Always include App.tsx for UI changes
-        target_files.add("src/App.tsx")
+        target_files.add("App.tsx")
         
         # Determine if CSS changes are needed
         css_keywords = [
@@ -290,7 +320,7 @@ class PMAgent:
         ]
         
         if any(keyword in transcript_lower for keyword in css_keywords):
-            target_files.add("src/App.css")
+            target_files.add("App.css")
         
         # Determine if global styles are needed
         global_keywords = [
@@ -299,7 +329,7 @@ class PMAgent:
         ]
         
         if any(keyword in transcript_lower for keyword in global_keywords):
-            target_files.add("src/index.css")
+            target_files.add("index.css")
         
         # Determine if new components are needed
         component_keywords = [
@@ -308,24 +338,42 @@ class PMAgent:
         ]
         
         if any(keyword in transcript_lower for keyword in component_keywords):
-            # For now, we'll stick to modifying existing files
-            # In the future, this could create new component files
-            pass
+            # Extract component name from transcript
+            import re
+            patterns = [
+                r'create\s+(?:a\s+)?(\w+)\s+component',
+                r'add\s+(?:a\s+)?(\w+)\s+component', 
+                r'new\s+(\w+)\s+component',
+                r'(\w+)\s+component',
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, transcript_lower)
+                if match:
+                    component_name = match.group(1).capitalize()
+                    target_files.add(f"components/{component_name}.tsx")
+                    target_files.add(f"components/{component_name}.css")
+                    break
         
         # Specific feature-based file determination
         if 'dark mode' in transcript_lower or 'theme' in transcript_lower:
-            target_files.update(["src/App.tsx", "src/App.css"])
+            target_files.update(["App.tsx", "App.css"])
+            # Add theme-related files
+            if 'context' in transcript_lower or 'provider' in transcript_lower:
+                target_files.add("context/ThemeContext.tsx")
+            if 'hook' in transcript_lower:
+                target_files.add("hooks/useTheme.ts")
         
         if 'modal' in transcript_lower or 'popup' in transcript_lower:
-            target_files.update(["src/App.tsx", "src/App.css"])
+            target_files.update(["App.tsx", "App.css"])
         
         if 'navigation' in transcript_lower or 'header' in transcript_lower or 'footer' in transcript_lower:
-            target_files.update(["src/App.tsx", "src/App.css"])
+            target_files.update(["App.tsx", "App.css"])
         
         # Convert back to list and ensure we have at least one file
         result = list(target_files)
         if not result and is_ui_editing:
-            result = ["src/App.tsx"]
+            result = ["App.tsx"]
         
         return result
     

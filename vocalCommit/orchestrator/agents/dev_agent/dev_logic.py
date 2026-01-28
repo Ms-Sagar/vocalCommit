@@ -1,9 +1,123 @@
-import google.generativeai as genai
+import google.genai as genai
 from core.config import settings
+from tools.dependency_manager import handle_code_dependencies
+from tools.rate_limiter import wait_for_gemini_api
+import logging
+import os
+import re
+
+logger = logging.getLogger(__name__)
 
 # Configure Gemini API
-genai.configure(api_key=settings.gemini_api_key)
-client = genai.GenerativeModel('models/gemini-2.5-flash')
+client = genai.Client(api_key=settings.gemini_api_key)
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize filename to prevent sentence-like names and ensure proper format.
+    
+    Args:
+        filename: Original filename that might contain sentences or invalid chars
+        
+    Returns:
+        str: Sanitized filename with proper format
+    """
+    # If filename looks like a sentence (contains spaces and is long), extract meaningful parts
+    if ' ' in filename and len(filename) > 15:
+        # Try to extract a meaningful filename from a sentence
+        # Look for patterns like "create a ThemeToggle component" -> "ThemeToggle"
+        
+        # Common patterns to extract component names
+        patterns = [
+            r'create\s+(?:a\s+)?(\w+(?:\w+)*)\s+component',  # Capture full camelCase names
+            r'add\s+(?:a\s+)?(?:new\s+)?(\w+(?:\w+)*)\s+component',
+            r'new\s+(\w+(?:\w+)*)\s+component',
+            r'(\w+(?:\w+)*)\s+component',
+            r'create\s+(\w+(?:\w+)*)\s+(?:css|styles)',
+            r'(\w+(?:\w+)*)\s+(?:css|styles)',
+            r'new\s+(use\w+(?:\w+)*)\s+hook',
+            r'(use\w+(?:\w+)*)\s+hook',
+            r'create\s+(\w+(?:\w+)*Context)\s+provider',
+            r'(\w+(?:\w+)*Context)\s+provider',
+            r'create\s+(\w+(?:\w+)*)',
+            r'add\s+(\w+(?:\w+)*)',
+            r'new\s+(\w+(?:\w+)*)',
+        ]
+        
+        filename_lower = filename.lower()
+        for pattern in patterns:
+            match = re.search(pattern, filename_lower)
+            if match:
+                # Find the same match in the original string to preserve case
+                original_match = re.search(pattern, filename, re.IGNORECASE)
+                if original_match:
+                    component_name = original_match.group(1)
+                else:
+                    component_name = match.group(1)
+                
+                # Preserve camelCase and capitalize properly
+                if component_name.startswith('use'):
+                    # Hook: useTheme
+                    if component_name.lower() != component_name:
+                        # Already has proper casing
+                        component_name = component_name
+                    else:
+                        component_name = 'use' + component_name[3:].capitalize()
+                elif component_name.lower().endswith('context'):
+                    # Context: ThemeContext
+                    if 'Context' in component_name:
+                        component_name = component_name
+                    else:
+                        base_name = component_name[:-7].capitalize()
+                        component_name = base_name + 'Context'
+                else:
+                    # Regular component: preserve camelCase if present, otherwise capitalize
+                    if any(c.isupper() for c in component_name[1:]):
+                        # Already has camelCase
+                        component_name = component_name[0].upper() + component_name[1:]
+                    else:
+                        component_name = component_name.capitalize()
+                
+                # Determine file extension based on context
+                if 'css' in filename_lower or 'style' in filename_lower:
+                    return f"{component_name}.css"
+                elif 'hook' in filename_lower or component_name.startswith('use'):
+                    return f"{component_name}.ts"
+                elif 'context' in filename_lower or component_name.endswith('Context'):
+                    return f"{component_name}.tsx"
+                else:
+                    return f"{component_name}.tsx"
+    
+    # Handle wildcard patterns
+    if filename.startswith('*'):
+        # Extract meaningful part after wildcard
+        if 'css' in filename.lower():
+            return "Styles.css"
+        elif 'tsx' in filename.lower() or 'component' in filename.lower():
+            return "Component.tsx"
+        elif 'ts' in filename.lower():
+            return "Utils.ts"
+        else:
+            return "File.tsx"
+    
+    # Remove invalid characters
+    sanitized = re.sub(r'[*?<>|"()[\]{}]', '', filename)
+    
+    # Replace spaces and special chars with appropriate separators
+    sanitized = re.sub(r'[\s\-_]+', '', sanitized)
+    
+    # Ensure it has a proper extension
+    if not any(sanitized.endswith(ext) for ext in ['.tsx', '.ts', '.jsx', '.js', '.css', '.html', '.json']):
+        # Default to .tsx for React components
+        if not sanitized.endswith('.'):
+            sanitized += '.tsx'
+        else:
+            sanitized += 'tsx'
+    
+    # Ensure it starts with a letter and follows naming conventions
+    if not re.match(r'^[A-Za-z]', sanitized):
+        sanitized = 'Component' + sanitized
+    
+    return sanitized
 
 def run_dev_agent(target_filename, user_instruction, related_files=None, file_context=None):
     """
@@ -23,6 +137,25 @@ def run_dev_agent(target_filename, user_instruction, related_files=None, file_co
     Returns:
         Success message or error
     """
+    # Sanitize filename first to handle sentence-like names
+    original_filename = target_filename
+    target_filename = sanitize_filename(target_filename)
+    
+    if original_filename != target_filename:
+        logger.info(f"Sanitized filename: '{original_filename}' -> '{target_filename}'")
+    
+    # Validate filename - prevent wildcard or invalid characters
+    if any(char in target_filename for char in ['*', '?', '<', '>', '|', '"', '(', ')']):
+        error_msg = f"Invalid filename: {target_filename}. Filenames cannot contain wildcards or special characters."
+        logger.error(error_msg)
+        return error_msg
+    
+    # Ensure filename has proper extension
+    if not any(target_filename.endswith(ext) for ext in ['.tsx', '.ts', '.jsx', '.js', '.css', '.html', '.json']):
+        error_msg = f"Unsupported file type: {target_filename}. Supported: .tsx, .ts, .jsx, .js, .css, .html, .json"
+        logger.error(error_msg)
+        return error_msg
+        
     import os
     import logging
     
@@ -52,14 +185,25 @@ def run_dev_agent(target_filename, user_instruction, related_files=None, file_co
         logger.info(f"Attempting to read file: {file_path}")
         logger.info(f"Full path: {os.path.abspath(file_path)}")
         
-        try:
-            with open(file_path, "r") as f:
-                current_code = f.read()
-            logger.info(f"Successfully read {len(current_code)} characters from {target_filename}")
-        except FileNotFoundError as e:
-            error_msg = f"Error: File not found at {file_path}"
-            logger.error(error_msg)
-            return error_msg
+        # Check if file exists, if not, we'll create a new one
+        file_exists = os.path.exists(file_path)
+        
+        if file_exists:
+            try:
+                with open(file_path, "r") as f:
+                    current_code = f.read()
+                logger.info(f"Successfully read {len(current_code)} characters from {target_filename}")
+            except Exception as e:
+                error_msg = f"Error reading existing file {file_path}: {str(e)}"
+                logger.error(error_msg)
+                return error_msg
+        else:
+            # File doesn't exist - we'll create a new one
+            logger.info(f"File {file_path} doesn't exist, will create new file")
+            current_code = ""
+            
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
         
         # 2. CONSTRUCT THE ENHANCED PROMPT WITH CONTEXT
         file_type = "CSS" if target_filename.endswith('.css') else "React/TypeScript"
@@ -77,32 +221,51 @@ def run_dev_agent(target_filename, user_instruction, related_files=None, file_co
                         preview = content[:500] + "..." if len(content) > 500 else content
                         context_info += f"\n\n{rel_file}:\n```\n{preview}\n```"
         
-        prompt = f"""You are a {file_type} Developer working on a React Todo application.
+        # Determine if this is a new file or existing file
+        file_status = "NEW FILE" if not file_exists else "EXISTING FILE"
+        
+        prompt = f"""You are a Senior {file_type} Developer working on a PRODUCTION React Todo application.
 
-The user wants: "{user_instruction}"
+CRITICAL: This code will be deployed DIRECTLY to a running service. Dependencies are automatically managed.
 
-Current file: `{target_filename}`
+User Request: "{user_instruction}"
+
+File: `{target_filename}` ({file_status})
 ```{file_type.lower()}
-{current_code}
+{current_code if current_code else "// New file - create complete implementation"}
 ```{context_info}
 
-CRITICAL INSTRUCTIONS:
-1. Rewrite the ENTIRE file with the requested changes applied
-2. Maintain all existing functionality while adding the new features
-3. If this is a CSS file, ensure proper theming and responsive design
-4. If this is a React file, maintain TypeScript types and component structure
-5. Consider how this file works with the other files in the project
-6. OUTPUT ONLY THE RAW CODE - NO MARKDOWN BLOCKS, NO EXPLANATIONS, NO ```
-7. DO NOT wrap your response in markdown code blocks (```)
-8. Start directly with the code content
+PRODUCTION REQUIREMENTS:
+1. {"Write a complete, production-ready " + file_type + " file" if not file_exists else "Rewrite the ENTIRE file maintaining all existing functionality"}
+2. Code must be immediately runnable - no placeholders, no TODOs, no incomplete functions
+3. All imports must use exact, correct paths (dependencies are auto-installed)
+4. Follow React/TypeScript best practices and proper error handling
+5. Include proper TypeScript types and interfaces
+6. Ensure accessibility (ARIA labels, semantic HTML)
+7. Make responsive and mobile-friendly
+8. Use modern React patterns (hooks, functional components)
 
-Rewrite the complete file (raw code only):"""
+OUTPUT REQUIREMENTS:
+- OUTPUT ONLY RAW CODE - NO MARKDOWN BLOCKS, NO EXPLANATIONS
+- DO NOT wrap in ```typescript or ```css blocks
+- Start immediately with the actual code content
+- Code must be complete and production-ready
+
+{"Generate complete new " + file_type + " file:" if not file_exists else "Rewrite complete file:"}"""
         
         logger.info(f"Calling Gemini with enhanced prompt for {target_filename}")
         
-        # 3. CALL GEMINI (Fast & Cheap because context is small)
+        # 3. RATE LIMITING - Wait if needed before calling Gemini
+        wait_time = wait_for_gemini_api()
+        if wait_time > 0:
+            logger.info(f"Waited {wait_time:.1f} seconds due to rate limiting")
+        
+        # 4. CALL GEMINI (Fast & Cheap because context is small)
         try:
-            response = client.generate_content(prompt)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt
+            )
         except Exception as e:
             error_msg = f"Error calling Gemini API for {target_filename}: {str(e)}"
             logger.error(error_msg)
@@ -115,13 +278,32 @@ Rewrite the complete file (raw code only):"""
         
         logger.info(f"Gemini returned {len(response.text)} characters")
         
-        # 4. OVERWRITE THE FILE (The "Replace" Strategy)
+        # 5. HANDLE DEPENDENCIES (Before writing the file)
         new_code = response.text
+        dependency_result = handle_code_dependencies(file_path, new_code)
+        
+        if dependency_result['status'] == 'partial_success':
+            logger.warning(f"Some dependencies failed to install: {dependency_result.get('failed_dependencies', [])}")
+        elif dependency_result['status'] == 'success' and dependency_result.get('successful_dependencies'):
+            logger.info(f"Successfully installed dependencies: {dependency_result['successful_dependencies']}")
+        
+        # 6. OVERWRITE THE FILE (The "Replace" Strategy)
         with open(file_path, "w") as f:
             f.write(new_code)
         
-        logger.info(f"Successfully wrote {len(new_code)} characters to {target_filename}")
-        return f"Updated {target_filename} successfully."
+        # Prepare success message with dependency info
+        success_msg = f"Updated {target_filename} successfully."
+        if dependency_result.get('successful_dependencies'):
+            success_msg += f" Installed dependencies: {', '.join(dependency_result['successful_dependencies'])}"
+        if dependency_result.get('successful_requirements'):
+            success_msg += f" Updated requirements file with: {', '.join(dependency_result['successful_requirements'])}"
+        if dependency_result.get('failed_dependencies'):
+            success_msg += f" Warning: Failed to install: {', '.join(dependency_result['failed_dependencies'])}"
+        if dependency_result.get('failed_requirements'):
+            success_msg += f" Warning: Failed to update requirements: {', '.join(dependency_result['failed_requirements'])}"
+        
+        logger.info(success_msg)
+        return success_msg
         
     except Exception as e:
         error_msg = f"Error in run_dev_agent for {target_filename}: {str(e)}"
