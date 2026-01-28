@@ -1,0 +1,89 @@
+/*
+ * src/components/RefreshButton.css
+ *
+ * Styles for the Refresh Button component, featuring an iconic design,
+ * hover effects, and a loading animation.
+ *
+ * This file uses CSS variables defined in App.css for consistent theming.
+ */
+
+.refresh-button {
+  /* Basic button reset and layout */
+  background: transparent;
+  border: none;
+  padding: 10px; /* Provides a larger clickable area around the icon */
+  border-radius: var(--border-radius, 8px); /* Rounded corners, fallback to 8px */
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-accent, #667eea); /* Icon color, fallback to a vibrant blue */
+  transition: all 0.2s ease-in-out; /* Smooth transitions for visual feedback */
+  outline: none; /* Remove default focus outline for custom styling */
+  position: relative; /* Useful for potential future additions like tooltips */
+  font-size: 1rem; /* Ensures good scaling and readability */
+  line-height: 1; /* Prevents extra vertical space */
+}
+
+/* Hover styles: Subtle background change and accent color shift */
+.refresh-button:hover {
+  background-color: var(--bg-light-hover, rgba(0, 0, 0, 0.05)); /* Light hover background */
+  color: var(--text-accent-hover, #764ba2); /* Slightly darker accent color on hover */
+}
+
+/* Focus styles: Accessible outline using a primary color with opacity */
+.refresh-button:focus-visible {
+  background-color: var(--bg-light-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-accent-hover, #764ba2);
+  box-shadow: 0 0 0 3px var(--color-primary-light, rgba(102, 126, 234, 0.4)); /* Custom focus ring */
+}
+
+/* Active state: Slight translateY for a pressed button feel */
+.refresh-button:active {
+  transform: translateY(1px);
+}
+
+/* Icon wrapper: Ensures the icon itself is centered and flexible */
+.refresh-button .icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* SVG Icon specific styles */
+.refresh-button .refresh-icon {
+  width: 24px; /* Standard icon size */
+  height: 24px; /* Standard icon size */
+  stroke: currentColor; /* Inherit color from the parent button for easy theming */
+  stroke-width: 2; /* Standard stroke width for clarity */
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.3s ease-in-out; /* Smooth rotation transition on hover */
+}
+
+/* Icon rotation on hover for a dynamic effect */
+.refresh-button:hover .refresh-icon {
+  transform: rotate(30deg);
+}
+
+/* Loading state: Visually indicates that data is being refreshed */
+.refresh-button.is-loading {
+  cursor: not-allowed; /* Change cursor to indicate non-interactiveness */
+  opacity: 0.7; /* Slightly dim the button */
+  pointer-events: none; /* Prevent further clicks while loading */
+}
+
+/* Continuous spin animation for the icon when in loading state */
+.refresh-button.is-loading .refresh-icon {
+  animation: spin 1s linear infinite; /* Infinite linear spin */
+}
+
+/* Keyframe animation for the spin effect */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

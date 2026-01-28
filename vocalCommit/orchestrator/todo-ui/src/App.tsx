@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // For generating temporary IDs
 import './App.css'; // Import the CSS styles
+import RefreshButton from './components/RefreshButton'; // NEW: Import the RefreshButton component
 
 // --- Types ---
 type Filter = 'all' | 'completed' | 'active';
@@ -482,15 +483,12 @@ function App() {
             </div>
           )}
           {/* Theme Toggle Button has been removed */}
-          <button
-            className="refresh-btn"
+          <RefreshButton
             onClick={() => fetchTodos(true)}
             disabled={isLoadingTodos || activeCrudOperations.current.size > 0}
-            aria-label={isLoadingTodos ? "Loading todos" : (activeCrudOperations.current.size > 0 ? "Operations pending, cannot refresh" : "Refresh todos")}
-          >
-            {isLoadingTodos ? <Spinner /> : null}
-            {isLoadingTodos ? 'Loading...' : 'Refresh'}
-          </button>
+            isLoading={isLoadingTodos}
+            ariaLabel={isLoadingTodos ? "Loading todos" : (activeCrudOperations.current.size > 0 ? "Operations pending, cannot refresh" : "Refresh todos")}
+          />
         </div>
       </header>
 

@@ -143,25 +143,34 @@ body {
   color: var(--text-header-p);
 }
 
+/* Updated refresh-btn for icon */
 .refresh-btn {
   background: var(--refresh-btn-bg);
-  color: var(--text-light);
+  color: var(--text-light); /* Icon color */
   border: 1px solid var(--border-header-btn);
-  padding: 10px 20px;
-  border-radius: 8px;
+  width: 44px; /* Fixed width for a square button */
+  height: 44px; /* Fixed height for a square button */
+  padding: 0; /* No internal padding, size handled by width/height */
+  border-radius: 8px; /* Rounded corners for the square button */
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.25rem; /* Size of the icon */
   transition: all 0.3s ease;
   margin-top: 0; /* Override potential previous margin */
+  display: flex; /* Use flexbox to center the icon */
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0; /* Prevent button from shrinking in flex containers */
 }
 
 .refresh-btn:hover:not(:disabled) {
   background: var(--refresh-btn-hover-bg);
+  transform: scale(1.05); /* Slight enlarge effect for "cool" */
 }
 
 .refresh-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none; /* Disable transform when disabled */
 }
 
 /* Theme toggle button styles removed */
