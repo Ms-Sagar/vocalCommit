@@ -40,6 +40,32 @@ class TestingAgent:
         else:
             ui_dir = "vocalCommit/orchestrator/todo-ui"
         
+        # Check for theme system files and validate integration
+        theme_files = {
+            'context': None,
+            'hook': None,
+            'component': None,
+            'css_updated': False
+        }
+        
+        for file in modified_files:
+            if 'ThemeContext' in file:
+                theme_files['context'] = file
+            elif 'useTheme' in file:
+                theme_files['hook'] = file
+            elif 'ThemeToggle' in file:
+                theme_files['component'] = file
+            elif file.endswith('.css') and any(theme_word in file.lower() for theme_word in ['app', 'theme', 'style']):
+                theme_files['css_updated'] = True
+        
+        # If theme files detected, run theme system validation
+        if any(theme_files[key] for key in ['context', 'hook', 'component']):
+            theme_validation = self._validate_theme_system(ui_dir, theme_files)
+            results["theme_validation"] = theme_validation
+            if theme_validation["errors"]:
+                results["errors"].extend(theme_validation["errors"])
+                results["status"] = "partial_success"
+        
         try:
             # Run TypeScript compilation check
             logger.info("Running TypeScript compilation check...")
@@ -95,6 +121,88 @@ class TestingAgent:
             results["warnings"].append(f"ESLint check failed: {str(e)}")
         
         return results
+    
+    def _validate_theme_system(self, ui_dir: str, theme_files: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate theme system integration and correctness.
+        
+        Args:
+            ui_dir: UI project directory
+            theme_files: Dict of detected theme files
+            
+        Returns:
+            Dict with theme validation results
+        """
+        validation_results = {
+            "status": "success",
+            "errors": [],
+            "warnings": [],
+            "checks_performed": []
+        }
+        
+        try:
+            # Check 1: ThemeContext exports
+            if theme_files['context']:
+                context_path = os.path.join(ui_dir, "src", theme_files['context'])
+                if os.path.exists(context_path):
+                    with open(context_path, 'r') as f:
+                        context_content = f.read()
+                    
+                    validation_results["checks_performed"].append("ThemeContext exports")
+                    if 'export' not in context_content or 'ThemeProvider' not in context_content:
+                        validation_results["errors"].append("ThemeContext.tsx must export ThemeProvider component")
+                    if 'createContext' not in context_content:
+                        validation_results["errors"].append("ThemeContext.tsx must create and export React context")
+            
+            # Check 2: useTheme hook
+            if theme_files['hook']:
+                hook_path = os.path.join(ui_dir, "src", theme_files['hook'])
+                if os.path.exists(hook_path):
+                    with open(hook_path, 'r') as f:
+                        hook_content = f.read()
+                    
+                    validation_results["checks_performed"].append("useTheme hook validation")
+                    if 'useContext' not in hook_content:
+                        validation_results["errors"].append("useTheme hook must use useContext to access theme")
+                    if 'export' not in hook_content:
+                        validation_results["errors"].append("useTheme hook must be exported")
+            
+            # Check 3: CSS variables
+            if theme_files['css_updated']:
+                css_path = os.path.join(ui_dir, "src", "App.css")
+                if os.path.exists(css_path):
+                    with open(css_path, 'r') as f:
+                        css_content = f.read()
+                    
+                    validation_results["checks_performed"].append("CSS theme variables")
+                    if '[data-theme="dark"]' not in css_content:
+                        validation_results["errors"].append("CSS must include [data-theme=\"dark\"] selector for dark theme")
+                    if '--' not in css_content:
+                        validation_results["warnings"].append("CSS should use CSS custom properties (variables) for theming")
+            
+            # Check 4: main.tsx integration
+            main_path = os.path.join(ui_dir, "src", "main.tsx")
+            if os.path.exists(main_path):
+                with open(main_path, 'r') as f:
+                    main_content = f.read()
+                
+                validation_results["checks_performed"].append("ThemeProvider integration")
+                if 'ThemeProvider' not in main_content:
+                    validation_results["errors"].append("main.tsx must wrap App with ThemeProvider")
+                if 'import' in main_content and 'ThemeProvider' in main_content:
+                    if './context/ThemeContext' not in main_content and './context/ThemeContext.tsx' not in main_content:
+                        validation_results["warnings"].append("Verify ThemeProvider import path is correct")
+            
+            if validation_results["errors"]:
+                validation_results["status"] = "failed"
+            elif validation_results["warnings"]:
+                validation_results["status"] = "partial_success"
+                
+        except Exception as e:
+            validation_results["errors"].append(f"Theme validation error: {str(e)}")
+            validation_results["status"] = "error"
+        
+        return validation_results
     
     def run_build_test(self) -> Dict[str, Any]:
         """

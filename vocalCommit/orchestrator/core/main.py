@@ -15,6 +15,7 @@ from agents.security_agent.sec_logic import SecurityAgent
 from agents.devops_agent.ops_logic import DevOpsAgent
 from agents.testing_agent.test_logic import run_testing_agent
 from utils.thought_signatures import thought_manager
+from utils.theme_system_patterns import get_theme_system_knowledge
 from tools.ui_file_watcher import create_ui_watcher
 
 # Configure logging

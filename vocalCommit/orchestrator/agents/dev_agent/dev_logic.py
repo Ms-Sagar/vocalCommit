@@ -245,6 +245,16 @@ PRODUCTION REQUIREMENTS:
 7. Make responsive and mobile-friendly
 8. Use modern React patterns (hooks, functional components)
 
+THEME SYSTEM REQUIREMENTS (if this is theme-related):
+- For ThemeContext.tsx: Create Context with state, Provider component, export both
+- For useTheme.ts: Import context, create custom hook, validate context exists
+- For ThemeToggle.tsx: Use useTheme hook, render toggle button with proper styling
+- For CSS files: Use [data-theme="dark"] and [data-theme="light"] selectors
+- CSS variables must have fallback values: var(--color-bg, #ffffff)
+- Theme state must be applied to document.documentElement via data-theme attribute
+- Theme provider must wrap entire app in main.tsx
+- All theme files must work together as a cohesive system
+
 OUTPUT REQUIREMENTS:
 - OUTPUT ONLY RAW CODE - NO MARKDOWN BLOCKS, NO EXPLANATIONS
 - DO NOT wrap in ```typescript or ```css blocks

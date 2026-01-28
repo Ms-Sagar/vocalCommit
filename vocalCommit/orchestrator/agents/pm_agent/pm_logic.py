@@ -89,6 +89,20 @@ class PMAgent:
                   * Context: "ContextNameContext.tsx"
                   * CSS: "ComponentName.css"
                 
+                THEME SYSTEM REQUIREMENTS (for dark mode, theming, color scheme requests):
+                - Theme systems require React Context Provider pattern
+                - Must create files in this order: Context → Hook → Component → CSS
+                - Required files for theme system:
+                  * "ThemeContext.tsx" (Context provider with state)
+                  * "useTheme.ts" (Custom hook to consume context)
+                  * "ThemeToggle.tsx" (UI component for switching)
+                  * Update "App.css" (CSS variables with [data-theme] selectors)
+                  * Update "main.tsx" (wrap App with ThemeProvider)
+                - CSS variables must use [data-theme="dark"] and [data-theme="light"] selectors
+                - Theme state must be applied via data-theme attribute on document element
+                - All CSS variables need fallback values
+                - Theme preference should persist in localStorage
+                
                 PRODUCTION CONSIDERATIONS:
                 - Code must be immediately deployable
                 - All functionality must be complete (no TODOs)
