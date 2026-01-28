@@ -1,10 +1,11 @@
-import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useEffect, ReactNode } from 'react';
 
-export type Theme = 'light' | 'dark';
+// The Theme type is now fixed to 'light' as dark mode is removed.
+export type Theme = 'light';
 
+// The ThemeContextType now only includes the 'theme' as there is no toggle functionality.
 export interface ThemeContextType {
   theme: Theme;
-  toggleTheme: () => void;
 }
 
 export const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -14,36 +15,28 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const [theme, setTheme] = useState<Theme>(() => {
-    // Attempt to read theme from localStorage first
-    const storedTheme = localStorage.getItem('theme');
-    if (storedTheme === 'light' || storedTheme === 'dark') {
-      return storedTheme as Theme;
-    }
-    // If no theme in localStorage, detect system preference
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
+  // The theme is now always 'light'.
+  // We no longer need useState to manage theme state or read from localStorage on initial render
+  // for selection logic, as it's a fixed value.
+  const theme: Theme = 'light';
 
   useEffect(() => {
     const body = document.body;
-    if (theme === 'dark') {
-      body.classList.add('dark-theme');
-      document.documentElement.style.setProperty('color-scheme', 'dark');
-    } else {
-      body.classList.remove('dark-theme');
-      document.documentElement.style.setProperty('color-scheme', 'light');
-    }
-    // Persist the current theme to localStorage
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+    // Ensure the 'dark-theme' class is always removed, enforcing light mode styles.
+    body.classList.remove('dark-theme');
+    // Set the document's color-scheme property to 'light'.
+    document.documentElement.style.setProperty('color-scheme', 'light');
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
-  }, []);
+    // Persist the 'light' theme to localStorage.
+    // This ensures any previously stored 'dark' theme is overwritten and
+    // future loads consistently apply 'light' mode.
+    localStorage.setItem('theme', 'light');
+  }, []); // The effect runs once on mount to set the fixed 'light' theme properties.
 
+  // The context value now only provides the fixed 'light' theme.
+  // The toggleTheme function has been removed as there is no dark mode to toggle to.
   const contextValue = {
     theme,
-    toggleTheme,
   };
 
   return (

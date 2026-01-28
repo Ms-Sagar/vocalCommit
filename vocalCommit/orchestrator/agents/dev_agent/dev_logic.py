@@ -262,10 +262,16 @@ OUTPUT REQUIREMENTS:
         
         # 4. CALL GEMINI (Fast & Cheap because context is small)
         try:
+            # Log the API call with context info
+            logger.info(f"Calling Gemini API for {target_filename} (context: {len(current_code)} chars)")
+            
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=prompt
             )
+            
+            logger.info(f"Gemini API response received for {target_filename}: {len(response.text) if response and response.text else 0} characters")
+            
         except Exception as e:
             error_msg = f"Error calling Gemini API for {target_filename}: {str(e)}"
             logger.error(error_msg)
@@ -312,7 +318,7 @@ OUTPUT REQUIREMENTS:
 
 def process_ui_editing_plan(plan, user_instruction):
     """
-    Process a UI editing plan from the PM Agent with multi-file coordination.
+    Process a UI editing plan from the PM Agent with multi-file coordination and status updates.
     
     Args:
         plan: Task plan from PM Agent containing target_files
@@ -330,14 +336,24 @@ def process_ui_editing_plan(plan, user_instruction):
     modified_files = []
     errors = []
     
-    logger.info(f"Processing UI editing plan with multi-file coordination")
+    logger.info(f"Dev Agent processing UI editing plan with multi-file coordination")
     logger.info(f"User instruction: {user_instruction}")
     logger.info(f"Target files: {target_files}")
     logger.info(f"Full plan: {plan}")
     
+    # Check rate limit status before starting
+    from tools.rate_limiter import get_gemini_api_status
+    rate_status = get_gemini_api_status()
+    
+    if rate_status['remaining_requests'] == 0:
+        wait_time = rate_status.get('reset_in_seconds', 0)
+        logger.warning(f"Dev Agent rate limited, will wait up to {wait_time:.1f} seconds per file")
+    
     # 1. GATHER CONTEXT FROM ALL TARGET FILES
     file_context = {}
     current_dir = os.getcwd()
+    
+    logger.info(f"Dev Agent gathering context from {len(target_files)} target files")
     
     for target_file in target_files:
         try:
@@ -357,7 +373,7 @@ def process_ui_editing_plan(plan, user_instruction):
                     file_context[target_file] = f.read()
                 logger.info(f"Loaded context for {target_file}: {len(file_context[target_file])} characters")
             except FileNotFoundError:
-                logger.warning(f"Could not load context for {target_file}: file not found")
+                logger.warning(f"Could not load context for {target_file}: file not found (will create new)")
                 file_context[target_file] = None
         except Exception as e:
             logger.warning(f"Error loading context for {target_file}: {str(e)}")
@@ -369,11 +385,16 @@ def process_ui_editing_plan(plan, user_instruction):
     react_files = [f for f in target_files if not f.endswith('.css')]
     ordered_files = css_files + react_files
     
-    logger.info(f"Processing files in order: {ordered_files}")
+    logger.info(f"Dev Agent processing files in order: {ordered_files}")
     
-    for target_file in ordered_files:
+    for i, target_file in enumerate(ordered_files, 1):
         try:
-            logger.info(f"Processing target file: {target_file}")
+            logger.info(f"Dev Agent processing file {i}/{len(ordered_files)}: {target_file}")
+            
+            # Show progress for multiple files
+            if len(ordered_files) > 1:
+                logger.info(f"Progress: {i}/{len(ordered_files)} files ({(i/len(ordered_files)*100):.0f}%)")
+            
             result = run_dev_agent(
                 target_file, 
                 user_instruction, 
@@ -408,8 +429,7 @@ def process_ui_editing_plan(plan, user_instruction):
             logger.error(f"Exception for {target_file}: {str(e)}")
             errors.append(error_msg)
     
-    logger.info(f"Modified files: {modified_files}")
-    logger.info(f"Errors: {errors}")
+    logger.info(f"Dev Agent completed processing. Modified files: {modified_files}, Errors: {errors}")
     
     if modified_files and not errors:
         return {

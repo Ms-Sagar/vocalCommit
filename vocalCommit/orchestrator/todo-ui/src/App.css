@@ -1,4 +1,4 @@
-/* --- CSS Variables for Light and Dark Theme --- */
+/* --- CSS Variables for Light Theme --- */
 :root {
   /* General Backgrounds */
   --bg-app: #f8f9fa;
@@ -95,102 +95,6 @@
   --status-in-progress-color: var(--color-warning-accent);
 }
 
-body.dark-theme {
-  /* General Backgrounds */
-  --bg-app: #1a1a2e; /* Very dark blue */
-  --bg-card: #21213e; /* Darker blue-purple for cards */
-  --bg-header: #31315e; /* Solid dark color for header */
-  --bg-modal-overlay: rgba(0, 0, 0, 0.7);
-  --bg-modal-footer: #2a2a4c;
-  --bg-light-hover: #3a3a60;
-  --bg-polling-status: rgba(0, 0, 0, 0.3); /* Background for polling status in header (darker translucent) */
-
-  /* Text Colors */
-  --text-primary: #e0e0e0;
-  --text-secondary: #a0a0c0;
-  --text-muted: #707090;
-  --text-light: white;
-  --text-link: #66b3ff;
-  --text-header-p: rgba(255, 255, 255, 0.7);
-  --text-polling-status: rgba(255, 255, 255, 0.7);
-
-  /* Border Colors */
-  --border-base: #3a3a60;
-  --border-input: #4a4a70;
-  --border-dashed: #4a4a70;
-  --border-header-btn: rgba(255, 255, 255, 0.2);
-  --border-spinner-base: rgba(255, 255, 255, 0.2);
-  --border-spinner-top: var(--color-primary-accent); /* Top border for spinner */
-
-  /* Accent & Action Colors (Darker versions if needed, or keep same) */
-  --color-primary-accent: #66b3ff; /* Lighter blue for visibility */
-  --color-success-accent: #208e3a; /* Darker green */
-  --color-warning-accent: #d4a700; /* Darker yellow */
-  --color-danger-accent: #a52d3a; /* Darker red */
-  --color-info-accent: #b3d9ff; /* Lighter blue for visibility */
-  --color-secondary-accent: #5a6268; /* Darker grey */
-  --color-primary-gradient-start: #208e3a; /* Darker green gradient start */
-  --color-primary-gradient-end: #1a9e72; /* Darker green gradient end */
-
-  /* Component Specific */
-  --filter-btn-bg: var(--bg-card);
-  --filter-btn-text: var(--text-primary);
-  --filter-btn-border: var(--border-input);
-  --filter-btn-hover-text: var(--color-primary-accent);
-  --filter-btn-hover-border: var(--color-primary-accent);
-  --filter-btn-active-bg: var(--color-primary-accent);
-  --filter-btn-active-text: var(--text-light);
-  --filter-btn-active-border: var(--color-primary-accent);
-
-  --refresh-btn-bg: rgba(255, 255, 255, 0.1);
-  --refresh-btn-hover-bg: rgba(255, 255, 255, 0.2);
-
-  --file-tag-bg: #3a3a60;
-  --file-tag-text: var(--text-primary);
-  --dependency-tag-bg: #4d4d7f;
-  --dependency-tag-text: var(--color-info-accent);
-
-  --error-banner-bg: #3a1c1d;
-  --error-banner-text: #f0a3a7;
-  --error-banner-border: #4d262d;
-  --error-banner-btn-bg: #a52d3a;
-  --error-banner-btn-hover-bg: #8f2631;
-
-  --loading-h3: var(--color-primary-accent);
-  --loading-border: var(--color-primary-accent);
-
-  --admin-link-bg: var(--color-primary-accent);
-  --admin-link-hover-bg: #004da7;
-
-  --toast-bg: var(--bg-card);
-  --toast-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --toast-message-text: var(--text-primary);
-  --toast-close-btn-color: var(--text-secondary);
-  --toast-close-btn-hover-color: var(--text-primary);
-
-  --modal-header-text: var(--text-primary);
-  --form-label-text: var(--text-primary);
-  --form-input-text: var(--text-primary);
-  --form-input-focus-border: var(--color-primary-accent);
-
-  --cancel-btn-bg: var(--color-secondary-accent);
-  --cancel-btn-hover-bg: #4e555b;
-  --add-btn-bg: var(--color-primary-accent);
-  --add-btn-hover-bg: #004da7;
-
-  --delete-btn-bg: var(--color-danger-accent);
-  --delete-btn-hover-bg: #8f2631;
-
-  --shadow-card: 0 2px 10px rgba(0,0,0,0.3);
-  --shadow-card-hover: 0 4px 20px rgba(0,0,0,0.4);
-  --shadow-modal: 0 10px 30px rgba(0,0,0,0.7);
-  --shadow-btn-hover-success: 0 4px 12px rgba(32, 142, 58, 0.4);
-
-  --status-pending-color: var(--color-secondary-accent);
-  --status-completed-color: var(--color-success-accent);
-  --status-in-progress-color: var(--color-warning-accent);
-}
-
 /* Apply theme background and default text color to body */
 body {
   margin: 0;
@@ -260,32 +164,7 @@ body {
   cursor: not-allowed;
 }
 
-.theme-toggle-btn {
-  background: var(--refresh-btn-bg);
-  color: var(--text-light);
-  border: 1px solid var(--border-header-btn);
-  width: 40px; /* fixed width for square/circle */
-  height: 40px; /* fixed height for square/circle */
-  border-radius: 50%; /* Make it circular */
-  display: flex; /* To center the icon */
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  font-size: 1.2rem; /* Size of the icon */
-  transition: all 0.3s ease;
-  flex-shrink: 0; /* Prevent it from shrinking in flex container */
-}
-
-.theme-toggle-btn:hover {
-  background: var(--refresh-btn-hover-bg);
-}
-
-.theme-toggle-btn svg {
-  width: 20px;
-  height: 20px;
-  fill: currentColor; /* Use the button's text color */
-}
-
+/* Theme toggle button styles removed */
 
 .stats {
   display: grid;

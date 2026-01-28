@@ -3,7 +3,7 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark; /* Allows browser to render native UI elements in light/dark mode */
+  color-scheme: light; /* Allows browser to render native UI elements in light mode only */
 
   /* Global theme colors, using CSS variables defined in App.css */
   /* Fallbacks provided for initial load or if variables are not yet defined */
@@ -79,39 +79,3 @@ button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-
-/* Styling for the theme toggle button */
-.theme-toggle-button {
-  /* Override default button styles for a more subtle, icon-based button */
-  border: none;
-  background-color: transparent; /* Transparent background by default */
-  color: var(--text-primary); /* Icon color based on primary text */
-  padding: 0.5em; /* Smaller padding suitable for icons */
-  width: 44px; /* Ensure sufficient touch target size */
-  height: 44px;
-  border-radius: 50%; /* Circular shape */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2em; /* Base size for icon, adjust as needed */
-  transition: background-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
-}
-
-.theme-toggle-button:hover {
-  background-color: var(--bg-light-hover, rgba(0, 0, 0, 0.05)); /* Subtle hover effect */
-  color: var(--color-primary); /* Highlight icon on hover */
-  transform: scale(1.05); /* Slightly enlarge on hover */
-}
-
-.theme-toggle-button:focus,
-.theme-toggle-button:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-  background-color: var(--bg-light-hover, rgba(0, 0, 0, 0.05)); /* Keep hover background on focus */
-  transform: scale(1.05); /* Keep enlarged on focus */
-}
-
-/* Removed specific dark theme overrides for :root and body that were here previously. */
-/* These are now handled by the CSS variables defined in src/App.css */
-/* which will be conditionally applied based on the data-theme attribute on the root HTML element */
-/* or by the user's system preference (prefers-color-scheme) if no explicit theme is set. */

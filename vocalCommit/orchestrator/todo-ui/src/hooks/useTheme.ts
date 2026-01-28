@@ -2,10 +2,11 @@ import { useContext } from 'react';
 import { ThemeContext, ThemeContextType } from '../context/ThemeContext';
 
 /**
- * Custom hook to access the current theme and the theme toggler function.
+ * Custom hook to access the current theme.
  * It ensures that the ThemeContext is used within a ThemeProvider.
+ * With dark mode removed, the theme is always 'light'.
  *
- * @returns An object containing the current theme ('light' or 'dark') and the toggleTheme function.
+ * @returns An object containing the current theme ('light').
  * @throws An error if `useTheme` is used outside of a `ThemeProvider`.
  */
 export const useTheme = (): ThemeContextType => {

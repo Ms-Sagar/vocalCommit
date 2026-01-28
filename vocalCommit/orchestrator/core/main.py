@@ -155,14 +155,14 @@ async def get_admin_workflows():
     """Get active admin workflows only (pending and in-progress, not completed or rejected)."""
     workflows = []
     
-    # Add pending workflows (waiting for approval)
+    # Add pending workflows (waiting for Dev Agent approval)
     for task_id, data in pending_approvals.items():
         if task_id not in suspended_workflows:  # Don't show suspended workflows
             workflows.append({
                 "id": task_id,
                 "title": data["transcript"],
-                "description": f"Task plan created, waiting for approval to proceed to {data['next_step'].replace('_', ' ')}",
-                "status": "pending_approval",
+                "description": f"Ready to modify files - waiting for Dev Agent approval",
+                "status": "pending_dev_approval",
                 "priority": "medium",
                 "createdAt": "2024-01-23T" + str(len(workflows)).zfill(2) + ":00:00Z",
                 "updatedAt": "2024-01-23T" + str(len(workflows)).zfill(2) + ":00:00Z",
@@ -369,7 +369,7 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.info("WebSocket client disconnected")
 
 async def process_voice_command(command_type: str, transcript: str) -> dict:
-    """Process voice commands through the agent system with manual approval."""
+    """Process voice commands through the agent system with direct Dev Agent approval."""
     try:
         # Create a task ID for this command
         task_id = f"task_{hash(transcript) % 10000}"
@@ -398,36 +398,52 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
                 "task_id": task_id
             }
         
-        # Every command should edit UI directly - no more code generation
-        # Step 1: PM Agent creates a plan for UI editing
-        logger.info(f"Processing command with PM Agent for UI editing: {transcript}")
+        # Show immediate processing status
+        logger.info(f"Processing command: {transcript}")
+        
+        # Check rate limit status before calling PM Agent
+        from tools.rate_limiter import get_gemini_api_status
+        rate_status = get_gemini_api_status()
+        
+        processing_msg = "🤖 **Analyzing Your Request**\n\n"
+        if rate_status['remaining_requests'] == 0:
+            wait_time = rate_status.get('reset_in_seconds', 0)
+            processing_msg += f"⏳ **Rate Limit**: Waiting {wait_time:.0f}s for AI analysis...\n"
+        else:
+            processing_msg += f"🧠 **AI Planning**: Creating implementation plan...\n"
+        
+        processing_msg += f"📝 **Command**: {transcript}\n\n⚡ **Status**: Analysis in progress..."
+        
+        # Step 1: PM Agent creates a plan automatically (no approval needed)
+        logger.info(f"PM Agent automatically creating plan for: {transcript}")
         pm_result = await pm_agent.plan_task(transcript, is_ui_editing=True)
         
         if pm_result["status"] != "success":
             return {
                 "status": "error",
                 "agent": "PM Agent",
-                "response": "Failed to create task plan",
+                "response": "❌ **Planning Failed**\n\nFailed to create implementation plan. Please try again.",
                 "transcript": transcript
             }
         
         plan = pm_result["plan"]
+        logger.info(f"PM Agent created plan with {len(plan.get('target_files', []))} target files")
         
-        # Store for approval - everything is UI editing now
+        # Step 2: Ask for Dev Agent approval only
         pending_approvals[task_id] = {
-            "step": "pm_completed",
+            "step": "dev_agent_approval",
             "plan": plan,
             "transcript": transcript,
-            "next_step": "dev_agent",
+            "next_step": "execute_dev_agent",
             "created_at": "2024-01-23T10:00:00Z",
             "requires_approval": True
         }
         
-        # Add to pending workflow state - everything is UI editing
+        # Add to pending workflow state
         workflow_states["pending"][task_id] = {
             "transcript": transcript,
             "plan": plan,
-            "status": "pending_approval",
+            "status": "pending_dev_approval",
             "created_at": "2024-01-23T10:00:00Z"
         }
         
@@ -438,20 +454,23 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
             "recommendations": ["Proceed with development", "Consider UI/UX implications"]
         })
         
-        ui_indicator = "🎨 **UI Editing Task**"
+        # Show target files that will be modified
+        target_files_display = ""
+        if plan.get("target_files"):
+            target_files_display = f"\n📁 **Files to Modify**: {', '.join(plan['target_files'])}"
         
         return {
-            "status": "pending_approval",
+            "status": "pending_dev_approval",
             "task_id": task_id,
-            "agent": "PM Agent",
-            "response": f"📋 **Task Plan Created**\n\n"
-                       f"{ui_indicator}\n"
-                       f"**Description**: {plan['description']}\n"
+            "agent": "Dev Agent",
+            "response": f"🔧 **Ready to Modify UI Files**\n\n"
+                       f"**Task**: {plan['description']}\n"
                        f"**Priority**: {plan['priority']}\n"
-                       f"**Estimated Effort**: {plan['estimated_effort']}\n\n"
-                       f"**Breakdown**:\n" + "\n".join([f"• {item}" for item in plan['breakdown']]) + "\n\n"
-                       f"⏳ **Waiting for approval to proceed to Dev Agent**\n"
-                       f"Use task ID: {task_id}",
+                       f"**Estimated Time**: {plan['estimated_effort']}{target_files_display}\n\n"
+                       f"**Implementation Plan**:\n" + "\n".join([f"• {item}" for item in plan['breakdown']]) + "\n\n"
+                       f"⚠️ **Warning**: This will immediately modify your UI files\n"
+                       f"🔄 **Action**: Approve to start file modification\n\n"
+                       f"💡 **Task ID**: {task_id}",
             "transcript": transcript,
             "requires_approval": True,
             "next_agent": "Dev Agent",
@@ -463,7 +482,7 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         return {
             "status": "error",
             "agent": "Orchestrator",
-            "response": f"An error occurred while processing your command: {str(e)}",
+            "response": f"❌ **Processing Error**\n\nAn error occurred while processing your command: {str(e)}",
             "transcript": transcript
         }
 
@@ -489,17 +508,20 @@ async def handle_approval(action: str, task_id: str) -> dict:
         }
 
 async def approve_task(task_id: str) -> dict:
-    """Approve a pending task and proceed to next step."""
+    """Approve a pending task and start background processing."""
     if task_id not in pending_approvals:
         return {
             "status": "error",
-            "response": f"No pending approval found for task {task_id}"
+            "response": f"❌ **Approval Error**\n\nNo pending approval found for task {task_id}"
         }
     
     approval_data = pending_approvals[task_id]
     current_step = approval_data["step"]
     
-    # Move from pending to active state
+    # IMMEDIATELY remove from pending approvals to clear the approval window
+    del pending_approvals[task_id]
+    
+    # Move from pending to active state IMMEDIATELY
     workflow_states["active"][task_id] = {
         "transcript": approval_data["transcript"],
         "plan": approval_data.get("plan", {}),
@@ -512,154 +534,229 @@ async def approve_task(task_id: str) -> dict:
     if task_id in workflow_states["pending"]:
         del workflow_states["pending"][task_id]
     
-    # Remove from pending approvals immediately to prevent re-approval
-    del pending_approvals[task_id]
-    
+    if current_step == "dev_agent_approval" and approval_data["next_step"] == "execute_dev_agent":
+        # Check rate limit status for user info
+        from tools.rate_limiter import get_gemini_api_status
+        rate_status = get_gemini_api_status()
+        
+        # Send immediate approval confirmation
+        status_msg = "🔄 **Dev Agent Approved - Processing Started**"
+        if rate_status['remaining_requests'] == 0:
+            wait_time = rate_status.get('reset_in_seconds', 0)
+            status_msg += f"\n⏳ **Rate Limited**: Processing will take ~{wait_time:.0f}s due to API limits"
+        else:
+            status_msg += f"\n🧠 **AI Processing**: Generating code changes in background..."
+        
+        # Start background processing
+        import asyncio
+        asyncio.create_task(process_task_in_background(task_id, approval_data))
+        
+        # Send processing started notification via WebSocket
+        processing_message = {
+            "type": "task_processing",
+            "task_id": task_id,
+            "status": "processing",
+            "transcript": approval_data["transcript"],
+            "target_files": approval_data.get('plan', {}).get('target_files', []),
+            "message": f"🔄 **Dev Agent Processing**\n\n**{approval_data['transcript']}**\n\nModifying {len(approval_data.get('plan', {}).get('target_files', []))} files..."
+        }
+        
+        # Broadcast to all connected WebSocket clients
+        for connection in manager.active_connections:
+            try:
+                await connection.send_text(json.dumps(processing_message))
+            except Exception as e:
+                logger.warning(f"Failed to send processing notification to WebSocket client: {e}")
+        
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "agent": "Dev Agent",
+            "response": f"✅ **Dev Agent Approved**\n\n"
+                       f"**Task**: {approval_data['transcript']}\n\n"
+                       f"{status_msg}\n\n"
+                       f"📁 **Files to Modify**: {', '.join(approval_data.get('plan', {}).get('target_files', []))}\n\n"
+                       f"🔄 **Status**: Processing in background\n"
+                       f"💡 **Updates**: You'll receive notification when complete\n\n"
+                       f"✨ **Approval window closed** - task is now running",
+            "transcript": approval_data["transcript"]
+        }
+    else:
+        return {
+            "status": "error",
+            "response": f"❌ **Unknown Step**\n\nUnknown approval step: {current_step}"
+        }
+
+async def process_task_in_background(task_id: str, approval_data: dict):
+    """Process the approved task in the background."""
     try:
-        if current_step == "pm_completed" and approval_data["next_step"] == "dev_agent":
-            # Send immediate approval confirmation
-            approval_confirmation = {
-                "status": "approval_confirmed",
+        logger.info(f"Background processing started for task: {task_id}")
+        
+        plan = approval_data["plan"]
+        dev_context = thought_manager.get_context_for_agent(task_id, "Dev Agent")
+        
+        # Show processing status
+        logger.info(f"Starting UI editing for {len(plan.get('target_files', []))} files")
+        
+        # Always use UI editing workflow - modify existing todo-ui files using "Need-to-Know" architecture
+        dev_result = process_ui_editing_plan(plan, approval_data["transcript"])
+        
+        logger.info(f"Dev result: {dev_result}")
+        
+        if dev_result["status"] not in ["success", "partial_success"]:
+            # Task failed
+            error_details = dev_result.get("errors", ["Unknown error"])
+            completed_tasks[task_id] = {
                 "task_id": task_id,
-                "agent": "System",
-                "response": f"✅ **Approval Confirmed**\n\nTask '{approval_data['transcript']}' has been approved.\n\n🔄 **Proceeding to Dev Agent...**\nGenerating code implementation now.",
-                "transcript": approval_data["transcript"]
-            }
-            
-            # Proceed to Dev Agent with UI editing flag
-            logger.info(f"Approved PM step, proceeding to Dev Agent for task: {task_id}")
-            
-            plan = approval_data["plan"]
-            dev_context = thought_manager.get_context_for_agent(task_id, "Dev Agent")
-            
-            # Always use UI editing workflow - modify existing todo-ui files using "Need-to-Know" architecture
-            dev_result = process_ui_editing_plan(plan, approval_data["transcript"])
-            
-            logger.info(f"Dev result: {dev_result}")
-            
-            if dev_result["status"] != "success":
-                # Don't re-add to pending approvals - task has already been approved
-                # Add to completed tasks with error status instead
-                completed_tasks[task_id] = {
-                    "task_id": task_id,
-                    "transcript": approval_data["transcript"],
-                    "status": "error",
-                    "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                    "type": "ui_editing_failed",
-                    "error": "Dev agent failed to modify UI files"
-                }
-                
-                # Remove from active state
-                if task_id in workflow_states["active"]:
-                    del workflow_states["active"][task_id]
-                
-                return {
-                    "status": "error",
-                    "agent": "Dev Agent",
-                    "response": "❌ **UI Editing Failed**\n\nThe development agent encountered an error while modifying UI files. The task has been marked as failed and will not reappear for approval.",
-                    "task_id": task_id
-                }
-            
-            # UI editing completed successfully
-            modified_files = dev_result.get("modified_files", [])
-            
-            # Run comprehensive testing on the modified files
-            logger.info(f"Running comprehensive testing for {len(modified_files)} modified files")
-            test_result = run_testing_agent(approval_data["transcript"], modified_files)
-            logger.info(f"Testing result: {test_result}")
-            
-            # Create thought signature for Dev Agent
-            thought_manager.add_thought(task_id, "Dev Agent", {
-                "summary": f"Modified UI files for task: {approval_data['transcript']}",
-                "outputs": {"modified_files": modified_files},
-                "recommendations": ["Check UI changes", "Test functionality"]
-            })
-            
-            # Create thought signature for Testing Agent
-            thought_manager.add_thought(task_id, "Testing Agent", {
-                "summary": f"Tested implementation for task: {approval_data['transcript']}",
-                "outputs": {"test_results": test_result},
-                "recommendations": test_result.get("recommendations", [])
-            })
-            
-            # Task completed
-            task_data = {
-                "id": task_id,
-                "title": approval_data["transcript"],
-                "description": f"Modified todo-ui for: {approval_data['transcript']}",
-                "status": "completed",
-                "priority": plan.get("priority", "medium"),
-                "createdAt": "2024-01-23T10:00:00Z",
-                "updatedAt": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                "modified_files": modified_files,
-                "ui_changes": dev_result.get("ui_changes", []),
-                "test_results": test_result,
-                "type": "ui_editing"
-            }
-            
-            completed_tasks[task_id] = task_data
-            
-            # Move from active to completed state
-            workflow_states["completed"][task_id] = {
                 "transcript": approval_data["transcript"],
-                "status": "completed",
+                "status": "error",
                 "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                "type": "ui_editing",
-                "modified_files": modified_files,
-                "test_results": test_result
+                "type": "ui_editing_failed",
+                "error": "Dev agent failed to modify UI files",
+                "error_details": error_details
             }
             
-            # Remove from active state (pending already removed)
+            # Move to failed state
+            workflow_states["failed"][task_id] = {
+                "transcript": approval_data["transcript"],
+                "status": "failed",
+                "failed_at": "2024-01-23T10:00:00Z",
+                "error": "Dev agent failed to modify UI files",
+                "error_details": error_details
+            }
+            
+            # Remove from active state
             if task_id in workflow_states["active"]:
                 del workflow_states["active"][task_id]
             
-            # Create response with test results
-            test_status_emoji = {
-                "success": "✅",
-                "partial_success": "⚠️",
-                "warning": "⚠️", 
-                "error": "❌"
-            }.get(test_result.get("status", "unknown"), "❓")
+            logger.error(f"Background processing failed for task {task_id}: {error_details}")
             
-            test_summary = f"\n\n🧪 **Testing Results**: {test_status_emoji} {test_result.get('overall_assessment', 'Testing completed')}"
-            
-            if test_result.get("tests_run"):
-                test_summary += f"\n📋 **Tests Run**: {', '.join(test_result['tests_run'])}"
-            
-            if test_result.get("recommendations"):
-                test_summary += f"\n💡 **Recommendations**:\n" + "\n".join([f"• {rec}" for rec in test_result["recommendations"][:3]])
-            
-            return {
-                "status": "completed",
+            # Send failure notification via WebSocket to connected clients
+            failure_message = {
+                "type": "task_failed",
                 "task_id": task_id,
-                "agent": "Dev Agent + Testing Agent",
-                "response": f"✅ **UI Editing Completed Successfully!**\n\n"
-                           f"🎨 **Files Modified**: {len(modified_files)} files\n"
-                           f"📁 **Modified Files**: {', '.join(modified_files)}\n"
-                           f"🔄 **Auto-reload**: Changes should be visible immediately\n\n"
-                           f"**UI Changes Made**:\n" + 
-                           "\n".join([f"• {change}" for change in dev_result.get("ui_changes", [])]) + 
-                           test_summary + "\n\n"
-                           f"🎯 **Task**: {approval_data['transcript']}\n\n"
-                           f"🌐 **Check UI**: http://localhost:5174",
+                "status": "failed",
                 "transcript": approval_data["transcript"],
-                "modified_files": modified_files,
-                "ui_changes": dev_result.get("ui_changes", []),
-                "test_results": test_result
-            }
-        
-        else:
-            return {
-                "status": "error",
-                "response": f"Unknown approval step: {current_step}"
+                "errors": error_details,
+                "message": f"❌ **Task Failed**\n\n**{approval_data['transcript']}**\n\nErrors occurred during processing"
             }
             
-    except Exception as e:
-        logger.error(f"Error in approval process: {str(e)}")
-        return {
-            "status": "error",
-            "response": f"Error processing approval: {str(e)}"
+            # Broadcast to all connected WebSocket clients
+            for connection in manager.active_connections:
+                try:
+                    await connection.send_text(json.dumps(failure_message))
+                except Exception as e:
+                    logger.warning(f"Failed to send failure notification to WebSocket client: {e}")
+            
+            return
+        
+        # UI editing completed successfully
+        modified_files = dev_result.get("modified_files", [])
+        
+        # Run comprehensive testing on the modified files
+        logger.info(f"Running comprehensive testing for {len(modified_files)} modified files")
+        test_result = run_testing_agent(approval_data["transcript"], modified_files)
+        logger.info(f"Testing result: {test_result}")
+        
+        # Create thought signature for Dev Agent
+        thought_manager.add_thought(task_id, "Dev Agent", {
+            "summary": f"Modified UI files for task: {approval_data['transcript']}",
+            "outputs": {"modified_files": modified_files},
+            "recommendations": ["Check UI changes", "Test functionality"]
+        })
+        
+        # Create thought signature for Testing Agent
+        thought_manager.add_thought(task_id, "Testing Agent", {
+            "summary": f"Tested implementation for task: {approval_data['transcript']}",
+            "outputs": {"test_results": test_result},
+            "recommendations": test_result.get("recommendations", [])
+        })
+        
+        # Task completed
+        task_data = {
+            "id": task_id,
+            "title": approval_data["transcript"],
+            "description": f"Modified todo-ui for: {approval_data['transcript']}",
+            "status": "completed",
+            "priority": plan.get("priority", "medium"),
+            "createdAt": "2024-01-23T10:00:00Z",
+            "updatedAt": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
+            "modified_files": modified_files,
+            "ui_changes": dev_result.get("ui_changes", []),
+            "test_results": test_result,
+            "type": "ui_editing"
         }
+        
+        completed_tasks[task_id] = task_data
+        
+        # Move from active to completed state
+        workflow_states["completed"][task_id] = {
+            "transcript": approval_data["transcript"],
+            "status": "completed",
+            "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
+            "type": "ui_editing",
+            "modified_files": modified_files,
+            "test_results": test_result
+        }
+        
+        # Remove from active state
+        if task_id in workflow_states["active"]:
+            del workflow_states["active"][task_id]
+        
+        logger.info(f"Background processing completed successfully for task {task_id}")
+        
+        # Send completion notification via WebSocket to connected clients
+        completion_message = {
+            "type": "task_completed",
+            "task_id": task_id,
+            "status": "completed",
+            "transcript": approval_data["transcript"],
+            "modified_files": modified_files,
+            "ui_changes": dev_result.get("ui_changes", []),
+            "test_results": test_result,
+            "message": f"🎉 **Task Completed!**\n\n**{approval_data['transcript']}**\n\n📁 Modified {len(modified_files)} files\n🌐 View changes at http://localhost:5174"
+        }
+        
+        # Broadcast to all connected WebSocket clients
+        for connection in manager.active_connections:
+            try:
+                await connection.send_text(json.dumps(completion_message))
+            except Exception as e:
+                logger.warning(f"Failed to send completion notification to WebSocket client: {e}")
+        
+        logger.info(f"Sent completion notification to {len(manager.active_connections)} WebSocket clients")
+        
+    except Exception as e:
+        logger.error(f"Error in background processing for task {task_id}: {str(e)}")
+        
+        # Move to failed state
+        workflow_states["failed"][task_id] = {
+            "transcript": approval_data["transcript"],
+            "status": "failed",
+            "failed_at": "2024-01-23T10:00:00Z",
+            "error": str(e)
+        }
+        
+        # Remove from active state
+        if task_id in workflow_states["active"]:
+            del workflow_states["active"][task_id]
+        
+        # Send failure notification via WebSocket to connected clients
+        failure_message = {
+            "type": "task_failed",
+            "task_id": task_id,
+            "status": "failed",
+            "transcript": approval_data["transcript"],
+            "error": str(e),
+            "message": f"❌ **Task Failed**\n\n**{approval_data['transcript']}**\n\nUnexpected error: {str(e)}"
+        }
+        
+        # Broadcast to all connected WebSocket clients
+        for connection in manager.active_connections:
+            try:
+                await connection.send_text(json.dumps(failure_message))
+            except Exception as ws_error:
+                logger.warning(f"Failed to send failure notification to WebSocket client: {ws_error}")
 
 async def reject_task(task_id: str) -> dict:
     """Reject a pending task and suspend the workflow."""
@@ -715,6 +812,103 @@ async def get_completed_workflows():
         workflows.append(data)
     
     return {"workflows": workflows}
+
+@app.get("/active-processing")
+async def get_active_processing():
+    """Get all currently processing tasks."""
+    active_tasks = []
+    
+    for task_id, data in workflow_states["active"].items():
+        plan = data.get("plan", {})
+        target_files = plan.get("target_files", [])
+        
+        active_tasks.append({
+            "task_id": task_id,
+            "transcript": data["transcript"],
+            "status": "processing",
+            "target_files": target_files,
+            "progress": f"Processing {len(target_files)} files",
+            "approved_at": data.get("approved_at"),
+            "current_step": data.get("current_step", "dev_agent")
+        })
+    
+    return {
+        "active_tasks": active_tasks,
+        "count": len(active_tasks)
+    }
+
+@app.get("/workflow-status/{task_id}")
+async def get_workflow_status(task_id: str):
+    """Get real-time status of a specific workflow."""
+    # Check pending approvals
+    if task_id in pending_approvals:
+        data = pending_approvals[task_id]
+        return {
+            "task_id": task_id,
+            "status": "pending_dev_approval",
+            "step": data["step"],
+            "next_step": data["next_step"],
+            "transcript": data["transcript"],
+            "message": f"Waiting for Dev Agent approval to modify files"
+        }
+    
+    # Check active workflows
+    if task_id in workflow_states["active"]:
+        data = workflow_states["active"][task_id]
+        
+        # Get more detailed status based on plan
+        plan = data.get("plan", {})
+        target_files = plan.get("target_files", [])
+        
+        return {
+            "task_id": task_id,
+            "status": "in_progress",
+            "step": data.get("current_step", "processing"),
+            "transcript": data["transcript"],
+            "target_files": target_files,
+            "progress": f"Processing {len(target_files)} files",
+            "message": f"🔄 Currently processing: {data.get('current_step', 'Unknown step')}"
+        }
+    
+    # Check completed workflows
+    if task_id in workflow_states["completed"]:
+        data = workflow_states["completed"][task_id]
+        return {
+            "task_id": task_id,
+            "status": "completed",
+            "transcript": data["transcript"],
+            "completed_at": data.get("completed_at"),
+            "message": "Task completed successfully"
+        }
+    
+    # Check failed workflows
+    if task_id in workflow_states["failed"]:
+        data = workflow_states["failed"][task_id]
+        return {
+            "task_id": task_id,
+            "status": "failed",
+            "transcript": data["transcript"],
+            "error": data.get("error"),
+            "failed_at": data.get("failed_at"),
+            "message": f"Task failed: {data.get('error', 'Unknown error')}"
+        }
+    
+    # Check rejected workflows
+    if task_id in workflow_states["rejected"]:
+        data = workflow_states["rejected"][task_id]
+        return {
+            "task_id": task_id,
+            "status": "rejected",
+            "transcript": data["transcript"],
+            "rejected_at": data.get("rejected_at"),
+            "message": "Task was rejected and suspended"
+        }
+    
+    return {
+        "task_id": task_id,
+        "status": "not_found",
+        "message": "Workflow not found"
+    }
 
 @app.get("/workflow-stats")
 async def get_workflow_stats():

@@ -26,7 +26,7 @@ class PMAgent:
         try:
             import google.genai as genai
             from core.config import settings
-            from tools.rate_limiter import wait_for_gemini_api
+            from tools.rate_limiter import wait_for_gemini_api, get_gemini_api_status
             
             # Configure Gemini API
             if not settings.gemini_api_key:
@@ -35,7 +35,13 @@ class PMAgent:
             
             client = genai.Client(api_key=settings.gemini_api_key)
             
-                # Create specialized prompt based on task type
+            # Check rate limit status before proceeding
+            rate_status = get_gemini_api_status()
+            if rate_status['remaining_requests'] == 0:
+                wait_time = rate_status.get('reset_in_seconds', 0)
+                logger.info(f"PM Agent rate limited, will wait {wait_time:.1f} seconds")
+            
+            # Create specialized prompt based on task type
             if is_ui_editing:
                 prompt = f"""
                 As a Senior UI/UX Designer and Frontend Developer, analyze this UI modification request for a PRODUCTION React Todo application:
@@ -114,10 +120,15 @@ class PMAgent:
             if wait_time > 0:
                 logger.info(f"PM Agent waited {wait_time:.1f} seconds due to rate limiting")
             
+            # Log the API call attempt
+            logger.info(f"PM Agent calling Gemini API for task planning...")
+            
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=prompt
             )
+            
+            logger.info(f"PM Agent received Gemini response: {len(response.text) if response and response.text else 0} characters")
             
             # Try to parse JSON response, fallback if needed
             try:
@@ -128,8 +139,10 @@ class PMAgent:
                 json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
                 if json_match:
                     ai_response = json.loads(json_match.group())
+                    logger.info(f"PM Agent successfully parsed JSON response")
                 else:
                     # If no JSON found, create structured response from text
+                    logger.warning(f"PM Agent could not find JSON in response, parsing text")
                     ai_response = self._parse_text_response(response.text, transcript, is_ui_editing)
                 
                 plan = {
@@ -144,6 +157,8 @@ class PMAgent:
                     "is_ui_editing": is_ui_editing,
                     "target_files": self._determine_target_files(ai_response.get("target_files", []), transcript, is_ui_editing)
                 }
+                
+                logger.info(f"PM Agent created plan with {len(plan.get('target_files', []))} target files")
                 
             except (json.JSONDecodeError, AttributeError) as e:
                 logger.warning(f"Could not parse Gemini response as JSON: {e}")

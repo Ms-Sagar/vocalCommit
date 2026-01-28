@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // For generating temporary IDs
 import './App.css'; // Import the CSS styles
-import { useTheme } from './hooks/useTheme'; // Import the useTheme hook
 
 // --- Types ---
 type Filter = 'all' | 'completed' | 'active';
@@ -248,9 +247,6 @@ function App() {
   const [globalError, setGlobalError] = useState<string | null>(null); // For persistent errors
   const [toasts, setToasts] = useState<Toast[]>([]); // For transient success/error messages
 
-  // Use the useTheme hook to manage dark mode state and functionality
-  const { theme, toggleTheme } = useTheme();
-
   // Tracks active optimistic CRUD operations to pause polling
   const activeCrudOperations = useRef(new Set<string>());
 
@@ -471,7 +467,7 @@ function App() {
   const totalTodosCount = todos.length;
 
   return (
-    <div className={`app ${theme}`}> {/* Apply the theme class to the root div */}
+    <div className="app"> {/* Removed dynamic theme class */}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       <header className="header">
@@ -485,15 +481,7 @@ function App() {
               <Spinner size="1em" color="var(--text-color-secondary)" /> Refreshing...
             </div>
           )}
-          {/* Theme Toggle Button using useTheme hook */}
-          <button
-            className="theme-toggle-btn"
-            onClick={toggleTheme} // Use toggleTheme from the hook
-            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-          >
-            {theme === 'dark' ? '☀️' : '🌙'} {/* Just icons for the circular button */}
-          </button>
+          {/* Theme Toggle Button has been removed */}
           <button
             className="refresh-btn"
             onClick={() => fetchTodos(true)}
