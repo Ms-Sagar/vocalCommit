@@ -31,13 +31,6 @@ interface AgentResponse {
   };
 }
 
-interface PendingApproval {
-  task_id: string;
-  step: string;
-  transcript: string;
-  next_step: string;
-}
-
 interface WorkflowStep {
   id: string;
   name: string;
@@ -57,22 +50,11 @@ const VoiceInterface: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [messages, setMessages] = useState<AgentResponse[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [activeWorkflows, setActiveWorkflows] = useState<TaskWorkflow[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
-  const [approvalFeedback, setApprovalFeedback] = useState<{[key: string]: string}>({});
-  const [processingApprovals, setProcessingApprovals] = useState<{[key: string]: boolean}>({});
   const [generatingFiles, setGeneratingFiles] = useState<{[key: string]: boolean}>({});
   const [filesGenerated, setFilesGenerated] = useState<{[key: string]: boolean}>({});
-  const [editingWorkflow, setEditingWorkflow] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({
-    transcript: '',
-    description: '',
-    priority: 'medium',
-    estimated_effort: '',
-    breakdown: [] as string[]
-  });
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -122,7 +104,6 @@ const VoiceInterface: React.FC = () => {
         setIsConnected(true);
         setConnectionStatus('Connected to VocalCommit Orchestrator');
         console.log('Connected to VocalCommit WebSocket');
-        fetchPendingApprovals();
       };
       
       ws.onmessage = (event) => {
@@ -133,18 +114,9 @@ const VoiceInterface: React.FC = () => {
           // Update workflow tracking
           updateWorkflowStatus(response);
           
-          // If this is a pending approval, refresh the approvals list
-          if (response.requires_approval) {
-            fetchPendingApprovals();
-          }
-          
-          // Clear approval feedback after successful operations
+          // Clear any processing states when task completes
           if (response.status === 'completed' || response.status === 'rejected') {
-            setApprovalFeedback(prev => {
-              const updated = { ...prev };
-              delete updated[response.task_id || ''];
-              return updated;
-            });
+            // Task completed, no additional cleanup needed
           }
         } catch (error) {
           console.error('Error parsing WebSocket message:', error);
@@ -219,15 +191,7 @@ const VoiceInterface: React.FC = () => {
     };
   }, []);
 
-  const fetchPendingApprovals = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/pending-approvals');
-      const data = await response.json();
-      setPendingApprovals(data.pending_approvals || []);
-    } catch (error) {
-      console.error('Error fetching pending approvals:', error);
-    }
-  };
+  // Removed fetchPendingApprovals since approvals are no longer needed
 
   const updateWorkflowStatus = (response: AgentResponse) => {
     if (!response.task_id) return;
@@ -236,22 +200,21 @@ const VoiceInterface: React.FC = () => {
       const existing = prev.find(w => w.task_id === response.task_id);
       
       if (!existing) {
-        // Create new workflow with dynamic steps based on response
+        // Create new workflow with simplified steps (no dev approval)
         const newWorkflow: TaskWorkflow = {
           task_id: response.task_id!,
           transcript: response.transcript || 'Unknown task',
           current_step: 0,
           steps: [
-            { id: 'pm_analysis', name: 'PM Analysis', status: 'pending', agent: 'PM Agent' },
-            { id: 'pm_approval', name: 'PM Approval', status: 'pending', agent: 'Manual Review' },
-            { id: 'dev_implementation', name: 'Development', status: 'pending', agent: 'Dev Agent' },
+            { id: 'pm_analysis', name: 'PM Analysis', status: 'completed', agent: 'PM Agent' },
+            { id: 'dev_implementation', name: 'Development', status: 'active', agent: 'Dev Agent' },
             { id: 'testing', name: 'Testing & Validation', status: 'pending', agent: 'Testing Agent' },
             { id: 'completion', name: 'Completion', status: 'pending', agent: 'System' }
           ]
         };
 
         // Update based on response status
-        if (response.status === 'pending_approval') {
+        if (response.status === 'processing') {
           newWorkflow.steps[0].status = 'completed';
           newWorkflow.steps[1].status = 'active';
           newWorkflow.current_step = 1;
@@ -265,17 +228,11 @@ const VoiceInterface: React.FC = () => {
 
           const updated = { ...workflow };
           
-          if (response.status === 'pending_approval') {
-            // Handle different types of approvals
-            if (response.agent === 'PM Agent') {
-              updated.steps[0].status = 'completed';
-              updated.steps[1].status = 'active';
-              updated.current_step = 1;
-            } else if (response.agent === 'Dev Agent') {
-              updated.steps[2].status = 'completed';
-              updated.steps[3].status = 'active';
-              updated.current_step = 3;
-            }
+          if (response.status === 'processing') {
+            // Dev Agent is processing
+            updated.steps[0].status = 'completed';
+            updated.steps[1].status = 'active';
+            updated.current_step = 1;
           } else if (response.status === 'completed') {
             // Mark all steps as completed, including testing
             updated.steps.forEach((step, index) => {
@@ -296,14 +253,6 @@ const VoiceInterface: React.FC = () => {
             updated.current_step = updated.steps.length - 1;
           } else if (response.status === 'rejected') {
             updated.steps[updated.current_step].status = 'rejected';
-          } else if (response.status === 'approval_confirmed') {
-            // Handle approval confirmation
-            const currentStep = updated.current_step;
-            if (currentStep < updated.steps.length - 1) {
-              updated.steps[currentStep].status = 'approved';
-              updated.steps[currentStep + 1].status = 'active';
-              updated.current_step = currentStep + 1;
-            }
           }
 
           return updated;
@@ -337,83 +286,7 @@ const VoiceInterface: React.FC = () => {
     }
   };
 
-  const handleApproval = async (taskId: string, action: 'approve' | 'reject') => {
-    // Prevent multiple clicks
-    if (processingApprovals[taskId]) {
-      return;
-    }
-
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      // Set processing state immediately
-      setProcessingApprovals(prev => ({
-        ...prev,
-        [taskId]: true
-      }));
-
-      // Show immediate feedback
-      setApprovalFeedback(prev => ({
-        ...prev,
-        [taskId]: action === 'approve' ? '🔄 Processing approval...' : '🔄 Processing rejection...'
-      }));
-
-      const message: VoiceMessage = {
-        type: 'approval',
-        transcript: `${action}_${taskId}`,
-        timestamp: new Date().toISOString()
-      };
-      
-      wsRef.current.send(JSON.stringify(message));
-      
-      // Update workflow status immediately for visual feedback
-      setActiveWorkflows(prev => prev.map(workflow => {
-        if (workflow.task_id !== taskId) return workflow;
-        
-        const updated = { ...workflow };
-        if (action === 'approve') {
-          // Find current step and advance it
-          const currentStepIndex = updated.current_step;
-          if (currentStepIndex < updated.steps.length - 1) {
-            updated.steps[currentStepIndex].status = 'approved';
-            updated.steps[currentStepIndex + 1].status = 'active';
-            updated.current_step = currentStepIndex + 1;
-          }
-        } else {
-          // Mark current step as rejected
-          updated.steps[updated.current_step].status = 'rejected';
-        }
-        return updated;
-      }));
-      
-      // Set a longer timeout for better user experience
-      setTimeout(() => {
-        // Update feedback based on action
-        setApprovalFeedback(prev => ({
-          ...prev,
-          [taskId]: action === 'approve' 
-            ? '✅ Approved! Processing with next agent...' 
-            : '❌ Task rejected and suspended'
-        }));
-        
-        // Refresh approvals to get updated state
-        fetchPendingApprovals();
-        
-        // Clear processing and feedback after longer delay
-        setTimeout(() => {
-          setProcessingApprovals(prev => {
-            const updated = { ...prev };
-            delete updated[taskId];
-            return updated;
-          });
-          
-          setApprovalFeedback(prev => {
-            const updated = { ...prev };
-            delete updated[taskId];
-            return updated;
-          });
-        }, 4000); // Increased to 4 seconds for better visibility
-      }, 1500); // Increased initial delay
-    }
-  };
+  // Removed approval handling since dev approval is no longer required
 
   const generateFilesForTask = async (taskId: string) => {
     // Prevent multiple clicks
@@ -485,100 +358,7 @@ const VoiceInterface: React.FC = () => {
     }
   };
 
-  const startEditingWorkflow = async (taskId: string) => {
-    try {
-      const response = await fetch(`http://localhost:8000/tasks/${taskId}`);
-      const workflow = await response.json();
-      
-      if (workflow.plan) {
-        setEditForm({
-          transcript: workflow.title || '',
-          description: workflow.plan.description || '',
-          priority: workflow.plan.priority || 'medium',
-          estimated_effort: workflow.plan.estimated_effort || '',
-          breakdown: workflow.plan.breakdown || []
-        });
-        setEditingWorkflow(taskId);
-      }
-    } catch (error) {
-      console.error('Error fetching workflow details:', error);
-    }
-  };
-
-  const saveWorkflowEdit = async () => {
-    if (!editingWorkflow) return;
-
-    try {
-      const response = await fetch(`http://localhost:8000/admin-workflows/${editingWorkflow}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          transcript: editForm.transcript,
-          plan: {
-            description: editForm.description,
-            priority: editForm.priority,
-            estimated_effort: editForm.estimated_effort,
-            breakdown: editForm.breakdown
-          }
-        })
-      });
-
-      const result = await response.json();
-      
-      if (result.status === 'success') {
-        setMessages(prev => [...prev, {
-          status: 'success',
-          agent: 'System',
-          response: `✅ **Workflow Updated Successfully!**\n\nTask "${editForm.transcript}" has been updated with your changes.`,
-          transcript: editForm.transcript
-        }]);
-        
-        // Refresh pending approvals
-        fetchPendingApprovals();
-        
-        // Close edit modal
-        setEditingWorkflow(null);
-      } else {
-        alert(`Error updating workflow: ${result.error}`);
-      }
-    } catch (error) {
-      alert(`Error updating workflow: ${error}`);
-    }
-  };
-
-  const cancelWorkflowEdit = () => {
-    setEditingWorkflow(null);
-    setEditForm({
-      transcript: '',
-      description: '',
-      priority: 'medium',
-      estimated_effort: '',
-      breakdown: []
-    });
-  };
-
-  const addBreakdownStep = () => {
-    setEditForm(prev => ({
-      ...prev,
-      breakdown: [...prev.breakdown, '']
-    }));
-  };
-
-  const updateBreakdownStep = (index: number, value: string) => {
-    setEditForm(prev => ({
-      ...prev,
-      breakdown: prev.breakdown.map((step, i) => i === index ? value : step)
-    }));
-  };
-
-  const removeBreakdownStep = (index: number) => {
-    setEditForm(prev => ({
-      ...prev,
-      breakdown: prev.breakdown.filter((_, i) => i !== index)
-    }));
-  };
+  // Removed workflow editing functions since approvals are no longer required
 
   return (
     <div className="voice-interface">
@@ -631,69 +411,14 @@ const VoiceInterface: React.FC = () => {
                   </div>
                 </div>
 
-                {approvalFeedback[workflow.task_id] && (
-                  <div className="approval-feedback">
-                    {approvalFeedback[workflow.task_id]}
-                  </div>
-                )}
+                {/* Workflow feedback removed since no approvals needed */}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Pending Approvals Section */}
-      {pendingApprovals.length > 0 && (
-        <div className="pending-approvals">
-          <h3>⏳ Pending Approvals ({pendingApprovals.length})</h3>
-          <div className="approvals-container">
-            {pendingApprovals.map((approval) => (
-              <div key={approval.task_id} className={`approval-card ${approval.step}`}>
-                <div className="approval-header">
-                  <h4>Task: {approval.transcript}</h4>
-                  <span className="task-id">ID: {approval.task_id}</span>
-                  <span className={`approval-type ${approval.step}`}>
-                    {getStepDisplayName(approval.step)}
-                  </span>
-                </div>
-                <div className="approval-details">
-                  <p><strong>Current Step:</strong> {getStepDisplayName(approval.step)}</p>
-                  <p><strong>Next Agent:</strong> {getNextAgentDisplayName(approval.next_step)}</p>
-                  <p><strong>Status:</strong> Waiting for manual approval to proceed</p>
-                </div>
-                <div className="approval-actions">
-                  <button 
-                    className="edit-btn"
-                    onClick={() => startEditingWorkflow(approval.task_id)}
-                  >
-                    ✏️ Edit
-                  </button>
-                  <button 
-                    className="approve-btn"
-                    onClick={() => handleApproval(approval.task_id, 'approve')}
-                    disabled={processingApprovals[approval.task_id] || !!approvalFeedback[approval.task_id]}
-                  >
-                    {processingApprovals[approval.task_id] ? '🔄 Processing...' : '✅ Approve'}
-                  </button>
-                  <button 
-                    className="reject-btn"
-                    onClick={() => handleApproval(approval.task_id, 'reject')}
-                    disabled={processingApprovals[approval.task_id] || !!approvalFeedback[approval.task_id]}
-                  >
-                    {processingApprovals[approval.task_id] ? '🔄 Processing...' : '❌ Reject'}
-                  </button>
-                </div>
-                
-                {approvalFeedback[approval.task_id] && (
-                  <div className="approval-feedback">
-                    {approvalFeedback[approval.task_id]}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Pending Approvals Section - Removed since dev approval is no longer required */}
 
       <div className="voice-controls">
         <div className="transcript-section">
@@ -751,139 +476,35 @@ const VoiceInterface: React.FC = () => {
               No messages yet. Try saying: "Create a user authentication system"
             </div>
           ) : (
-            messages.map((message, index) => (
+            messages
+              .filter(message => 
+                // Only show actual agent responses, not system status updates
+                message.agent && 
+                !message.response.includes('🔄 **Processing**') &&
+                !message.response.includes('📁 Modified') &&
+                !message.response.includes('🌐 View changes')
+              )
+              .map((message, index) => (
               <div key={index} className={`message ${message.requires_approval ? 'pending-approval' : ''}`}>
                 <div className="message-header">
                   <span className="agent-name">{message.agent || 'Orchestrator'}</span>
                   <span className={`message-status ${message.status}`}>{message.status}</span>
-                  {message.requires_approval && (
-                    <span className="approval-required">⏳ Approval Required</span>
-                  )}
                 </div>
                 <div className="message-content">
-                  {message.response}
+                  {/* Clean up the response to focus on agent communication */}
+                  {message.response
+                    .replace(/📁 \*\*Files to Modify\*\*:.*?\n\n/gs, '')
+                    .replace(/🔄 \*\*Status\*\*:.*?\n/g, '')
+                    .replace(/💡 \*\*Updates\*\*:.*?\n/g, '')
+                    .replace(/✨ \*\*Task ID\*\*:.*$/g, '')
+                    .replace(/💡 \*\*Task ID\*\*:.*$/g, '')
+                    .trim()
+                  }
                 </div>
                 
-                {/* Testing Results Display */}
-                {message.test_results && (
-                  <div className="testing-results">
-                    <h4>🧪 Testing Results</h4>
-                    <div className="test-summary">
-                      <div className={`test-status ${message.test_results.status}`}>
-                        Status: {message.test_results.status.toUpperCase()}
-                      </div>
-                      <div className="test-assessment">
-                        {message.test_results.overall_assessment}
-                      </div>
-                    </div>
-                    
-                    {message.test_results.tests_run && message.test_results.tests_run.length > 0 && (
-                      <div className="tests-executed">
-                        <strong>Tests Executed:</strong>
-                        <div className="test-badges">
-                          {message.test_results.tests_run.map((test, idx) => (
-                            <span key={idx} className="test-badge">
-                              {test === 'syntax_validation' && '📝 Syntax'}
-                              {test === 'build_test' && '🔨 Build'}
-                              {test === 'functional_validation' && '⚙️ Functional'}
-                              {!['syntax_validation', 'build_test', 'functional_validation'].includes(test) && test}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Detailed Test Results */}
-                    <div className="detailed-test-results">
-                      {message.test_results.syntax_validation && (
-                        <div className="test-detail">
-                          <strong>📝 Syntax Validation:</strong>
-                          <span className={`result-status ${message.test_results.syntax_validation.status}`}>
-                            {message.test_results.syntax_validation.status}
-                          </span>
-                          {message.test_results.syntax_validation.files_tested && (
-                            <div className="files-tested">
-                              Tested: {message.test_results.syntax_validation.files_tested.join(', ')}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {message.test_results.build_test && (
-                        <div className="test-detail">
-                          <strong>🔨 Build Test:</strong>
-                          <span className={`result-status ${message.test_results.build_test.status}`}>
-                            {message.test_results.build_test.status}
-                          </span>
-                          {message.test_results.build_test.message && (
-                            <div className="build-message">
-                              {message.test_results.build_test.message}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {message.test_results.functional_validation && (
-                        <div className="test-detail">
-                          <strong>⚙️ Functional Validation:</strong>
-                          <span className={`result-status ${message.test_results.functional_validation.status}`}>
-                            {message.test_results.functional_validation.status}
-                          </span>
-                          {message.test_results.functional_validation.ai_powered && (
-                            <span className="ai-badge">🤖 AI-Powered</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {message.test_results.recommendations && message.test_results.recommendations.length > 0 && (
-                      <div className="test-recommendations">
-                        <strong>💡 Recommendations:</strong>
-                        <ul>
-                          {message.test_results.recommendations.slice(0, 3).map((rec, idx) => (
-                            <li key={idx}>{rec}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Modified Files Display */}
-                {message.modified_files && message.modified_files.length > 0 && (
-                  <div className="modified-files">
-                    <strong>📁 Modified Files ({message.modified_files.length}):</strong>
-                    <div className="file-list">
-                      {message.modified_files.map((file, idx) => (
-                        <span key={idx} className="file-badge">{file}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 {message.transcript && (
                   <div className="original-command">
                     Original: "{message.transcript}"
-                  </div>
-                )}
-                {message.task_id && (
-                  <div className="task-actions">
-                    <div className="task-id-display">
-                      Task ID: {message.task_id}
-                    </div>
-                    {message.status === 'completed' && !filesGenerated[message.task_id!] && (
-                      <button 
-                        className="generate-files-btn"
-                        onClick={() => generateFilesForTask(message.task_id!)}
-                        disabled={generatingFiles[message.task_id!]}
-                      >
-                        {generatingFiles[message.task_id!] ? '🔄 Generating...' : '📁 Generate Files to Frontend'}
-                      </button>
-                    )}
-                    {filesGenerated[message.task_id!] && (
-                      <div className="files-generated-indicator">
-                        ✅ Files Generated Successfully
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -944,112 +565,6 @@ const VoiceInterface: React.FC = () => {
         </div>
       </div>
 
-      {/* Edit Workflow Modal */}
-      {editingWorkflow && (
-        <div className="modal-overlay">
-          <div className="modal edit-workflow-modal">
-            <div className="modal-header">
-              <h3>✏️ Edit Workflow</h3>
-              <button 
-                className="close-btn"
-                onClick={cancelWorkflowEdit}
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="modal-body">
-              <div className="form-group">
-                <label>Task Description *</label>
-                <input
-                  type="text"
-                  value={editForm.transcript}
-                  onChange={(e) => setEditForm({...editForm, transcript: e.target.value})}
-                  placeholder="Enter task description..."
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Detailed Description</label>
-                <textarea
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({...editForm, description: e.target.value})}
-                  placeholder="Enter detailed description..."
-                  rows={3}
-                />
-              </div>
-              
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Priority</label>
-                  <select
-                    value={editForm.priority}
-                    onChange={(e) => setEditForm({...editForm, priority: e.target.value})}
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-                
-                <div className="form-group">
-                  <label>Estimated Effort</label>
-                  <input
-                    type="text"
-                    value={editForm.estimated_effort}
-                    onChange={(e) => setEditForm({...editForm, estimated_effort: e.target.value})}
-                    placeholder="e.g., 2-4 hours, 1-2 days"
-                  />
-                </div>
-              </div>
-              
-              <div className="form-group">
-                <label>Implementation Steps</label>
-                <div className="breakdown-list">
-                  {editForm.breakdown.map((step, index) => (
-                    <div key={index} className="breakdown-item">
-                      <input
-                        type="text"
-                        value={step}
-                        onChange={(e) => updateBreakdownStep(index, e.target.value)}
-                        placeholder={`Step ${index + 1}...`}
-                      />
-                      <button 
-                        className="remove-step-btn"
-                        onClick={() => removeBreakdownStep(index)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                  <button 
-                    className="add-step-btn"
-                    onClick={addBreakdownStep}
-                  >
-                    ➕ Add Step
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <div className="modal-footer">
-              <button 
-                className="cancel-btn"
-                onClick={cancelWorkflowEdit}
-              >
-                Cancel
-              </button>
-              <button 
-                className="save-btn"
-                onClick={saveWorkflowEdit}
-                disabled={!editForm.transcript.trim()}
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

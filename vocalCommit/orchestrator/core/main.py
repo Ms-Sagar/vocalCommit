@@ -430,22 +430,16 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         plan = pm_result["plan"]
         logger.info(f"PM Agent created plan with {len(plan.get('target_files', []))} target files")
         
-        # Step 2: Ask for Dev Agent approval only
-        pending_approvals[task_id] = {
-            "step": "dev_agent_approval",
-            "plan": plan,
-            "transcript": transcript,
-            "next_step": "execute_dev_agent",
-            "created_at": "2024-01-23T10:00:00Z",
-            "requires_approval": True
-        }
+        # Step 2: Execute Dev Agent directly (no approval needed)
+        logger.info(f"Starting direct execution of Dev Agent for task: {task_id}")
         
-        # Add to pending workflow state
-        workflow_states["pending"][task_id] = {
+        # Move directly to active state
+        workflow_states["active"][task_id] = {
             "transcript": transcript,
             "plan": plan,
-            "status": "pending_dev_approval",
-            "created_at": "2024-01-23T10:00:00Z"
+            "status": "in_progress",
+            "started_at": "2024-01-23T10:00:00Z",
+            "current_step": "dev_agent"
         }
         
         # Create thought signature for PM Agent
@@ -460,20 +454,27 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         if plan.get("target_files"):
             target_files_display = f"\n📁 **Files to Modify**: {', '.join(plan['target_files'])}"
         
+        # Start background processing immediately
+        import asyncio
+        asyncio.create_task(process_task_in_background(task_id, {
+            "plan": plan,
+            "transcript": transcript
+        }))
+        
         return {
-            "status": "pending_dev_approval",
+            "status": "processing",
             "task_id": task_id,
             "agent": "Dev Agent",
-            "response": f"🔧 **Ready to Modify UI Files**\n\n"
+            "response": f"🔧 **Processing UI Modifications**\n\n"
                        f"**Task**: {plan['description']}\n"
                        f"**Priority**: {plan['priority']}\n"
                        f"**Estimated Time**: {plan['estimated_effort']}{target_files_display}\n\n"
                        f"**Implementation Plan**:\n" + "\n".join([f"• {item}" for item in plan['breakdown']]) + "\n\n"
-                       f"⚠️ **Warning**: This will immediately modify your UI files\n"
-                       f"🔄 **Action**: Approve to start file modification\n\n"
-                       f"💡 **Task ID**: {task_id}",
+                       f"🔄 **Status**: Dev Agent is now processing your request\n"
+                       f"💡 **Updates**: You'll receive notification when complete\n\n"
+                       f"✨ **Task ID**: {task_id}",
             "transcript": transcript,
-            "requires_approval": True,
+            "requires_approval": False,
             "next_agent": "Dev Agent",
             "plan_details": plan
         }
