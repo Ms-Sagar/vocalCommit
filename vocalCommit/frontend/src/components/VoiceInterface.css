@@ -1523,3 +1523,379 @@
     justify-content: flex-start;
   }
 }
+/* Commit Approvals Styles */
+.commit-approvals {
+  background: #fff8e1;
+  border: 2px solid #ffcc02;
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 30px;
+}
+
+.commit-approvals h3 {
+  margin-top: 0;
+  color: #f57c00;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.approvals-container {
+  display: grid;
+  gap: 20px;
+}
+
+.approval-card {
+  background: white;
+  border-radius: 12px;
+  padding: 25px;
+  border: 1px solid #ffcc02;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.approval-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.approval-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.approval-header h4 {
+  margin: 0;
+  color: #f57c00;
+  font-size: 1.2rem;
+  flex: 1;
+  min-width: 200px;
+}
+
+.commit-info {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.commit-details {
+  margin-bottom: 15px;
+}
+
+.commit-hash {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: #495057;
+}
+
+.commit-hash code {
+  background: #e9ecef;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85rem;
+  color: #007bff;
+  font-weight: 600;
+}
+
+.commit-timestamp {
+  font-size: 0.85rem;
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modified-files {
+  margin-top: 15px;
+}
+
+.modified-files strong {
+  color: #495057;
+  font-size: 0.9rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.modified-files ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style-type: none;
+}
+
+.modified-files li {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin-bottom: 4px;
+  position: relative;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.modified-files li::before {
+  content: "📄";
+  position: absolute;
+  left: -20px;
+  font-size: 0.8rem;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.approve-btn {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+  min-width: 140px;
+}
+
+.approve-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+}
+
+.rollback-soft-btn {
+  background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+  color: #212529;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+  min-width: 140px;
+}
+
+.rollback-soft-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(255, 193, 7, 0.3);
+}
+
+.rollback-hard-btn {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: center;
+  min-width: 140px;
+}
+
+.rollback-hard-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+}
+
+.rollback-info {
+  background: #e7f3ff;
+  border: 1px solid #b8daff;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 0.85rem;
+  color: #495057;
+  line-height: 1.4;
+}
+
+.rollback-info strong {
+  color: #007bff;
+  font-weight: 600;
+}
+
+/* Commit approval button states */
+.approve-btn:disabled,
+.rollback-soft-btn:disabled,
+.rollback-hard-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.approve-btn:disabled::after,
+.rollback-soft-btn:disabled::after,
+.rollback-hard-btn:disabled::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Progress step for commit approval */
+.progress-step.awaiting_commit_approval {
+  background: #fff8e1;
+  border: 2px solid #ffcc02;
+  animation: pulse-commit 2s infinite;
+}
+
+.progress-step.awaiting_commit_approval .step-indicator {
+  color: #f57c00;
+  font-size: 1.3rem;
+}
+
+@keyframes pulse-commit {
+  0% { 
+    border-color: #ffcc02;
+    box-shadow: 0 0 0 0 rgba(255, 204, 2, 0.4);
+  }
+  50% { 
+    border-color: #f57c00;
+    box-shadow: 0 0 0 8px rgba(255, 204, 2, 0);
+  }
+  100% { 
+    border-color: #ffcc02;
+    box-shadow: 0 0 0 0 rgba(255, 204, 2, 0);
+  }
+}
+
+/* Enhanced task ID styling for commit approvals */
+.commit-approvals .task-id {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  color: #495057;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-weight: 600;
+  border: 1px solid #dee2e6;
+}
+
+/* Responsive design for commit approvals */
+@media (max-width: 768px) {
+  .approval-actions {
+    flex-direction: column;
+  }
+  
+  .approve-btn,
+  .rollback-soft-btn,
+  .rollback-hard-btn {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .approval-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .commit-hash {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .modified-files ul {
+    padding-left: 15px;
+  }
+}
+
+/* Animation for commit approval cards */
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.commit-approvals .approval-card {
+  animation: slideInFromBottom 0.4s ease-out;
+}
+
+/* Enhanced commit info styling */
+.commit-info {
+  position: relative;
+  overflow: hidden;
+}
+
+.commit-info::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(135deg, #007bff 0%, #28a745 100%);
+  border-radius: 0 2px 2px 0;
+}
+
+/* Success and error states for commit actions */
+.commit-action-success {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 15px;
+  font-weight: 500;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.commit-action-error {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+  padding: 12px;
+  border-radius: 6px;
+  margin-top: 15px;
+  font-weight: 500;
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Git system message styling */
+.message .agent-name:contains("Git System") {
+  color: #f57c00;
+  font-weight: 700;
+}
+
+.message:has(.agent-name:contains("Git System")) {
+  border-left-color: #f57c00;
+}

@@ -20,6 +20,13 @@ interface AgentResponse {
   dependencies?: string[];
   modified_files?: string[];
   ui_changes?: string[];
+  commit_info?: {
+    commit_hash?: string;
+    commit_message?: string;
+    timestamp?: string;
+    status?: string;
+    error?: string;
+  };
   test_results?: {
     status: string;
     tests_run: string[];
@@ -34,7 +41,7 @@ interface AgentResponse {
 interface WorkflowStep {
   id: string;
   name: string;
-  status: 'pending' | 'active' | 'completed' | 'approved' | 'rejected';
+  status: 'pending' | 'active' | 'completed' | 'approved' | 'rejected' | 'awaiting_commit_approval';
   agent: string;
   timestamp?: string;
 }
@@ -44,6 +51,12 @@ interface TaskWorkflow {
   transcript: string;
   steps: WorkflowStep[];
   current_step: number;
+  commit_info?: {
+    commit_hash?: string;
+    commit_message?: string;
+    timestamp?: string;
+    status?: string;
+  };
 }
 
 const VoiceInterface: React.FC = () => {
@@ -55,6 +68,8 @@ const VoiceInterface: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const [generatingFiles, setGeneratingFiles] = useState<{[key: string]: boolean}>({});
   const [filesGenerated, setFilesGenerated] = useState<{[key: string]: boolean}>({});
+  const [completedTasks, setCompletedTasks] = useState<{[key: string]: AgentResponse}>({});
+  const [commitActions, setCommitActions] = useState<{[key: string]: boolean}>({});
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -113,6 +128,26 @@ const VoiceInterface: React.FC = () => {
           
           // Update workflow tracking
           updateWorkflowStatus(response);
+          
+          // Handle completed tasks for commit approval
+          if (response.status === 'completed' && response.task_id && response.commit_info) {
+            setCompletedTasks(prev => ({
+              ...prev,
+              [response.task_id!]: response
+            }));
+          }
+          
+          // Handle commit approval/rollback notifications
+          if (response.status === 'rolled_back' || response.status === 'approved') {
+            // Remove from completed tasks
+            if (response.task_id) {
+              setCompletedTasks(prev => {
+                const updated = { ...prev };
+                delete updated[response.task_id!];
+                return updated;
+              });
+            }
+          }
           
           // Clear any processing states when task completes
           if (response.status === 'completed' || response.status === 'rejected') {
@@ -209,7 +244,8 @@ const VoiceInterface: React.FC = () => {
             { id: 'pm_analysis', name: 'PM Analysis', status: 'completed', agent: 'PM Agent' },
             { id: 'dev_implementation', name: 'Development', status: 'active', agent: 'Dev Agent' },
             { id: 'testing', name: 'Testing & Validation', status: 'pending', agent: 'Testing Agent' },
-            { id: 'completion', name: 'Completion', status: 'pending', agent: 'System' }
+            { id: 'commit', name: 'Git Commit', status: 'pending', agent: 'System' },
+            { id: 'commit_approval', name: 'Commit Approval', status: 'pending', agent: 'User' }
           ]
         };
 
@@ -234,23 +270,24 @@ const VoiceInterface: React.FC = () => {
             updated.steps[1].status = 'active';
             updated.current_step = 1;
           } else if (response.status === 'completed') {
-            // Mark all steps as completed, including testing
-            updated.steps.forEach((step, index) => {
-              if (index <= updated.current_step + 1) {
-                step.status = index === updated.current_step ? 'approved' : 'completed';
-              }
-            });
+            // Mark development and testing as completed, commit as completed, commit approval as awaiting
+            updated.steps[0].status = 'completed'; // PM
+            updated.steps[1].status = 'completed'; // Dev
+            updated.steps[2].status = 'completed'; // Testing
+            updated.steps[3].status = 'completed'; // Commit
+            updated.steps[4].status = 'awaiting_commit_approval'; // Commit Approval
+            updated.current_step = 4;
             
-            // If we have test results, mark testing step as completed
-            if (response.test_results) {
-              const testingStepIndex = updated.steps.findIndex(s => s.id === 'testing');
-              if (testingStepIndex !== -1) {
-                updated.steps[testingStepIndex].status = 'completed';
-              }
+            // Store commit info
+            if (response.commit_info) {
+              updated.commit_info = response.commit_info;
             }
-            
-            updated.steps[updated.steps.length - 1].status = 'completed';
-            updated.current_step = updated.steps.length - 1;
+          } else if (response.status === 'approved') {
+            // Commit approved - mark final step as approved
+            updated.steps[4].status = 'approved';
+          } else if (response.status === 'rolled_back') {
+            // Commit rolled back - mark final step as rejected
+            updated.steps[4].status = 'rejected';
           } else if (response.status === 'rejected') {
             updated.steps[updated.current_step].status = 'rejected';
           }
@@ -358,6 +395,116 @@ const VoiceInterface: React.FC = () => {
     }
   };
 
+  const approveCommit = async (taskId: string) => {
+    if (commitActions[taskId]) return;
+
+    try {
+      setCommitActions(prev => ({ ...prev, [taskId]: true }));
+
+      const response = await fetch(`http://localhost:8000/approve-commit/${taskId}`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        setMessages(prev => [...prev, {
+          status: 'success',
+          agent: 'Git System',
+          response: `✅ **Commit Approved**\n\nTask "${completedTasks[taskId]?.transcript}" has been approved.\n\n🔗 **Commit**: ${result.commit_hash}\n\n🔒 **Status**: Changes are now final (rollback no longer available)`,
+          transcript: `Approve commit for ${taskId}`
+        }]);
+
+        // Remove from completed tasks
+        setCompletedTasks(prev => {
+          const updated = { ...prev };
+          delete updated[taskId];
+          return updated;
+        });
+      } else {
+        setMessages(prev => [...prev, {
+          status: 'error',
+          agent: 'Git System',
+          response: `❌ **Approval Failed**\n\n${result.error || 'Unknown error occurred'}`,
+          transcript: `Approve commit for ${taskId}`
+        }]);
+      }
+    } catch (error) {
+      console.error('Approve commit error:', error);
+      setMessages(prev => [...prev, {
+        status: 'error',
+        agent: 'Git System',
+        response: `❌ **Approval Error**\n\n${error instanceof Error ? error.message : String(error)}`,
+        transcript: `Approve commit for ${taskId}`
+      }]);
+    } finally {
+      setCommitActions(prev => {
+        const updated = { ...prev };
+        delete updated[taskId];
+        return updated;
+      });
+    }
+  };
+
+  const rollbackCommit = async (taskId: string, hardRollback: boolean = false) => {
+    if (commitActions[taskId]) return;
+
+    try {
+      setCommitActions(prev => ({ ...prev, [taskId]: true }));
+
+      const response = await fetch(`http://localhost:8000/rollback-commit/${taskId}?hard_rollback=${hardRollback}`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        setMessages(prev => [...prev, {
+          status: 'success',
+          agent: 'Git System',
+          response: `🔄 **Commit Rolled Back**\n\nTask "${completedTasks[taskId]?.transcript}" has been rolled back.\n\n🔗 **Commit**: ${result.rolled_back_commit}\n\n${hardRollback ? '🗑️ **Hard Rollback**: All changes have been discarded' : '📝 **Soft Rollback**: Changes are now unstaged'}`,
+          transcript: `Rollback commit for ${taskId}`
+        }]);
+
+        // Remove from completed tasks
+        setCompletedTasks(prev => {
+          const updated = { ...prev };
+          delete updated[taskId];
+          return updated;
+        });
+      } else {
+        setMessages(prev => [...prev, {
+          status: 'error',
+          agent: 'Git System',
+          response: `❌ **Rollback Failed**\n\n${result.error || 'Unknown error occurred'}`,
+          transcript: `Rollback commit for ${taskId}`
+        }]);
+      }
+    } catch (error) {
+      console.error('Rollback commit error:', error);
+      setMessages(prev => [...prev, {
+        status: 'error',
+        agent: 'Git System',
+        response: `❌ **Rollback Error**\n\n${error instanceof Error ? error.message : String(error)}`,
+        transcript: `Rollback commit for ${taskId}`
+      }]);
+    } finally {
+      setCommitActions(prev => {
+        const updated = { ...prev };
+        delete updated[taskId];
+        return updated;
+      });
+    }
+  };
+
   // Removed workflow editing functions since approvals are no longer required
 
   return (
@@ -394,6 +541,7 @@ const VoiceInterface: React.FC = () => {
                           {step.status === 'active' && '🔄'}
                           {step.status === 'rejected' && '❌'}
                           {step.status === 'pending' && '⏳'}
+                          {step.status === 'awaiting_commit_approval' && '⏳'}
                         </div>
                         <div className="step-info">
                           <div className="step-name">{step.name}</div>
@@ -412,6 +560,83 @@ const VoiceInterface: React.FC = () => {
                 </div>
 
                 {/* Workflow feedback removed since no approvals needed */}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Commit Approval Section */}
+      {Object.keys(completedTasks).length > 0 && (
+        <div className="commit-approvals">
+          <h3>🔗 Commit Approvals ({Object.keys(completedTasks).length})</h3>
+          <div className="approvals-container">
+            {Object.entries(completedTasks).map(([taskId, task]) => (
+              <div key={taskId} className="approval-card">
+                <div className="approval-header">
+                  <h4>{task.transcript}</h4>
+                  <span className="task-id">ID: {taskId}</span>
+                </div>
+                
+                <div className="commit-info">
+                  {task.commit_info?.commit_hash && (
+                    <div className="commit-details">
+                      <div className="commit-hash">
+                        🔗 Commit: <code>{task.commit_info.commit_hash}</code>
+                      </div>
+                      <div className="commit-timestamp">
+                        📅 {task.commit_info.timestamp}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {task.modified_files && task.modified_files.length > 0 && (
+                    <div className="modified-files">
+                      <strong>📁 Modified Files ({task.modified_files.length}):</strong>
+                      <ul>
+                        {task.modified_files.slice(0, 5).map((file, index) => (
+                          <li key={index}>{file}</li>
+                        ))}
+                        {task.modified_files.length > 5 && (
+                          <li>... and {task.modified_files.length - 5} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                <div className="approval-actions">
+                  <button
+                    onClick={() => approveCommit(taskId)}
+                    disabled={commitActions[taskId]}
+                    className="approve-btn"
+                  >
+                    {commitActions[taskId] ? '⏳ Approving...' : '✅ Approve Commit'}
+                  </button>
+                  
+                  <button
+                    onClick={() => rollbackCommit(taskId, false)}
+                    disabled={commitActions[taskId]}
+                    className="rollback-soft-btn"
+                  >
+                    {commitActions[taskId] ? '⏳ Rolling back...' : '🔄 Soft Rollback'}
+                  </button>
+                  
+                  <button
+                    onClick={() => rollbackCommit(taskId, true)}
+                    disabled={commitActions[taskId]}
+                    className="rollback-hard-btn"
+                  >
+                    {commitActions[taskId] ? '⏳ Rolling back...' : '🗑️ Hard Rollback'}
+                  </button>
+                </div>
+
+                <div className="rollback-info">
+                  <small>
+                    <strong>Soft Rollback:</strong> Keeps changes as unstaged files<br/>
+                    <strong>Hard Rollback:</strong> Completely discards all changes
+                  </small>
+                </div>
               </div>
             ))}
           </div>

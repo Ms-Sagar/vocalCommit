@@ -17,6 +17,7 @@ from agents.testing_agent.test_logic import run_testing_agent
 from utils.thought_signatures import thought_manager
 from utils.theme_system_patterns import get_theme_system_knowledge
 from tools.ui_file_watcher import create_ui_watcher
+from tools.git_ops import git_ops
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -186,6 +187,28 @@ async def get_admin_workflows():
             "step": data.get("step", "processing"),
             "workflow_type": "active"
         })
+    
+    # Add completed workflows (with commit info and rollback options)
+    for task_id, task in completed_tasks.items():
+        if task.get("status") == "completed":
+            commit_info = task.get("commit_info", {})
+            has_commit = bool(commit_info.get("commit_hash"))
+            
+            workflows.append({
+                "id": task_id,
+                "title": task["title"],
+                "description": f"Completed - {len(task.get('modified_files', []))} files modified",
+                "status": "completed_awaiting_approval",
+                "priority": task.get("priority", "medium"),
+                "createdAt": task.get("createdAt", "2024-01-23T10:00:00Z"),
+                "updatedAt": task.get("updatedAt", "2024-01-23T10:00:00Z"),
+                "workflow_type": "completed",
+                "commit_info": commit_info,
+                "has_commit": has_commit,
+                "can_rollback": has_commit,
+                "modified_files": task.get("modified_files", []),
+                "actions": ["approve_commit", "rollback_soft", "rollback_hard"] if has_commit else []
+            })
     
     return {"workflows": workflows}
 
@@ -689,6 +712,28 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "type": "ui_editing"
         }
         
+        # Commit changes to git
+        logger.info(f"Committing changes for task {task_id}")
+        commit_result = git_ops.commit_changes(
+            message=approval_data["transcript"],
+            task_id=task_id,
+            modified_files=modified_files
+        )
+        
+        if commit_result["status"] == "success":
+            task_data["commit_info"] = {
+                "commit_hash": commit_result["commit_hash"],
+                "commit_message": commit_result["commit_message"],
+                "timestamp": commit_result["timestamp"]
+            }
+            logger.info(f"Successfully committed changes for task {task_id}: {commit_result['commit_hash']}")
+        else:
+            logger.warning(f"Failed to commit changes for task {task_id}: {commit_result.get('error', 'Unknown error')}")
+            task_data["commit_info"] = {
+                "status": "failed",
+                "error": commit_result.get("error", "Unknown error")
+            }
+        
         completed_tasks[task_id] = task_data
         
         # Move from active to completed state
@@ -708,6 +753,12 @@ async def process_task_in_background(task_id: str, approval_data: dict):
         logger.info(f"Background processing completed successfully for task {task_id}")
         
         # Send completion notification via WebSocket to connected clients
+        commit_info_msg = ""
+        if task_data.get("commit_info", {}).get("commit_hash"):
+            commit_info_msg = f"\n🔗 **Commit**: {task_data['commit_info']['commit_hash']}"
+        elif task_data.get("commit_info", {}).get("status") == "failed":
+            commit_info_msg = f"\n⚠️ **Commit Failed**: {task_data['commit_info']['error']}"
+        
         completion_message = {
             "type": "task_completed",
             "task_id": task_id,
@@ -716,7 +767,8 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "modified_files": modified_files,
             "ui_changes": dev_result.get("ui_changes", []),
             "test_results": test_result,
-            "message": f"🎉 **Task Completed!**\n\n**{approval_data['transcript']}**\n\n📁 Modified {len(modified_files)} files\n🌐 View changes at http://localhost:5174"
+            "commit_info": task_data.get("commit_info"),
+            "message": f"🎉 **Task Completed!**\n\n**{approval_data['transcript']}**\n\n📁 Modified {len(modified_files)} files\n🌐 View changes at http://localhost:5174{commit_info_msg}"
         }
         
         # Broadcast to all connected WebSocket clients
@@ -812,6 +864,20 @@ async def get_completed_workflows():
     # Add rejected workflows
     for task_id, data in workflow_states["rejected"].items():
         workflows.append(data)
+    
+    # Add approved workflows
+    for task_id, data in workflow_states.get("approved", {}).items():
+        if task_id in completed_tasks:
+            task_data = completed_tasks[task_id].copy()
+            task_data["workflow_state"] = "approved"
+            workflows.append(task_data)
+    
+    # Add rolled back workflows
+    for task_id, data in workflow_states.get("rolled_back", {}).items():
+        if task_id in completed_tasks:
+            task_data = completed_tasks[task_id].copy()
+            task_data["workflow_state"] = "rolled_back"
+            workflows.append(task_data)
     
     return {"workflows": workflows}
 
@@ -918,7 +984,9 @@ async def get_workflow_stats():
     return {
         "pending": len(pending_approvals),
         "active": len(workflow_states["active"]),
-        "completed": len(completed_tasks),
+        "completed": len([t for t in completed_tasks.values() if t.get("status") == "completed"]),
+        "approved": len(workflow_states.get("approved", {})),
+        "rolled_back": len(workflow_states.get("rolled_back", {})),
         "rejected": len(workflow_states["rejected"]),
         "suspended": len(suspended_workflows),
         "failed": len(workflow_states["failed"])
@@ -954,3 +1022,213 @@ async def clear_all_suspended_workflows():
         "message": f"Cleared {count} suspended workflows",
         "cleared_count": count
     }
+
+@app.get("/git-status")
+async def get_git_status():
+    """Get current git repository status."""
+    try:
+        status = git_ops.check_git_status()
+        return status
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.get("/commit-history")
+async def get_commit_history(limit: int = 10):
+    """Get recent commit history."""
+    try:
+        history = git_ops.get_commit_history(limit)
+        return history
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.get("/last-commit")
+async def get_last_commit():
+    """Get information about the last commit."""
+    try:
+        commit_info = git_ops.get_last_commit_info()
+        return commit_info
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.post("/rollback-commit/{task_id}")
+async def rollback_task_commit(task_id: str, hard_rollback: bool = False):
+    """
+    Rollback the commit for a specific task.
+    
+    Args:
+        task_id: Task identifier
+        hard_rollback: If True, performs hard reset (discards changes). If False, soft reset (keeps changes unstaged)
+    """
+    try:
+        # Check if task exists and has commit info
+        if task_id not in completed_tasks:
+            return {
+                "status": "error",
+                "error": f"Task {task_id} not found in completed tasks"
+            }
+        
+        task = completed_tasks[task_id]
+        if not task.get("commit_info", {}).get("commit_hash"):
+            return {
+                "status": "error",
+                "error": f"Task {task_id} has no associated commit to rollback"
+            }
+        
+        # Perform rollback
+        if hard_rollback:
+            rollback_result = git_ops.hard_rollback_last_commit(task_id)
+        else:
+            rollback_result = git_ops.rollback_last_commit(task_id)
+        
+        if rollback_result["status"] != "success":
+            return rollback_result
+        
+        # Update task status to indicate rollback
+        task["status"] = "rolled_back"
+        task["rollback_info"] = {
+            "rolled_back_at": "2024-01-23T" + str(len(completed_tasks) + 20).zfill(2) + ":00:00Z",
+            "rollback_type": "hard" if hard_rollback else "soft",
+            "rolled_back_commit": rollback_result["rolled_back_commit"]
+        }
+        
+        # Move task to a separate rollback state
+        workflow_states["rolled_back"] = workflow_states.get("rolled_back", {})
+        workflow_states["rolled_back"][task_id] = {
+            "transcript": task["title"],
+            "status": "rolled_back",
+            "rolled_back_at": task["rollback_info"]["rolled_back_at"],
+            "rollback_type": task["rollback_info"]["rollback_type"],
+            "original_commit": task["commit_info"]["commit_hash"]
+        }
+        
+        # Remove from completed state
+        if task_id in workflow_states["completed"]:
+            del workflow_states["completed"][task_id]
+        
+        logger.info(f"Successfully rolled back task {task_id} ({'hard' if hard_rollback else 'soft'} rollback)")
+        
+        # Send rollback notification via WebSocket
+        rollback_message = {
+            "type": "task_rolled_back",
+            "task_id": task_id,
+            "status": "rolled_back",
+            "transcript": task["title"],
+            "rollback_type": "hard" if hard_rollback else "soft",
+            "rolled_back_commit": rollback_result["rolled_back_commit"],
+            "message": f"🔄 **Task Rolled Back**\n\n**{task['title']}**\n\n{'🗑️ Hard rollback: All changes discarded' if hard_rollback else '📝 Soft rollback: Changes kept as unstaged'}\n\n🔗 **Commit**: {rollback_result['rolled_back_commit']}"
+        }
+        
+        # Broadcast to all connected WebSocket clients
+        for connection in manager.active_connections:
+            try:
+                await connection.send_text(json.dumps(rollback_message))
+            except Exception as e:
+                logger.warning(f"Failed to send rollback notification to WebSocket client: {e}")
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "rollback_type": "hard" if hard_rollback else "soft",
+            "rolled_back_commit": rollback_result["rolled_back_commit"],
+            "message": rollback_result["message"],
+            "task_status": "rolled_back"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error rolling back task {task_id}: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.post("/approve-commit/{task_id}")
+async def approve_task_commit(task_id: str):
+    """
+    Approve a completed task's commit (marks it as final, no rollback available).
+    
+    Args:
+        task_id: Task identifier
+    """
+    try:
+        # Check if task exists and has commit info
+        if task_id not in completed_tasks:
+            return {
+                "status": "error",
+                "error": f"Task {task_id} not found in completed tasks"
+            }
+        
+        task = completed_tasks[task_id]
+        if not task.get("commit_info", {}).get("commit_hash"):
+            return {
+                "status": "error",
+                "error": f"Task {task_id} has no associated commit to approve"
+            }
+        
+        if task.get("status") == "approved":
+            return {
+                "status": "error",
+                "error": f"Task {task_id} is already approved"
+            }
+        
+        # Mark task as approved
+        task["status"] = "approved"
+        task["approval_info"] = {
+            "approved_at": "2024-01-23T" + str(len(completed_tasks) + 30).zfill(2) + ":00:00Z",
+            "commit_hash": task["commit_info"]["commit_hash"]
+        }
+        
+        # Move to approved state
+        workflow_states["approved"] = workflow_states.get("approved", {})
+        workflow_states["approved"][task_id] = {
+            "transcript": task["title"],
+            "status": "approved",
+            "approved_at": task["approval_info"]["approved_at"],
+            "commit_hash": task["commit_info"]["commit_hash"]
+        }
+        
+        # Remove from completed state (now it's approved)
+        if task_id in workflow_states["completed"]:
+            del workflow_states["completed"][task_id]
+        
+        logger.info(f"Task {task_id} commit approved and finalized")
+        
+        # Send approval notification via WebSocket
+        approval_message = {
+            "type": "commit_approved",
+            "task_id": task_id,
+            "status": "approved",
+            "transcript": task["title"],
+            "commit_hash": task["commit_info"]["commit_hash"],
+            "message": f"✅ **Commit Approved**\n\n**{task['title']}**\n\n🔒 Changes are now final (rollback no longer available)\n\n🔗 **Commit**: {task['commit_info']['commit_hash']}"
+        }
+        
+        # Broadcast to all connected WebSocket clients
+        for connection in manager.active_connections:
+            try:
+                await connection.send_text(json.dumps(approval_message))
+            except Exception as e:
+                logger.warning(f"Failed to send approval notification to WebSocket client: {e}")
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "commit_hash": task["commit_info"]["commit_hash"],
+            "message": f"Task {task_id} commit approved and finalized",
+            "task_status": "approved"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error approving task {task_id}: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
