@@ -9,7 +9,9 @@ import re
 logger = logging.getLogger(__name__)
 
 # Configure Gemini API
-client = genai.Client(api_key=settings.gemini_api_key)
+# Client initialized lazily
+client = None
+
 
 def sanitize_filename(filename: str) -> str:
     """
@@ -266,6 +268,14 @@ OUTPUT REQUIREMENTS:
         logger.info(f"Calling Gemini with enhanced prompt for {target_filename}")
         
         # 3. RATE LIMITING - Wait if needed before calling Gemini
+        if not settings.gemini_api_key:
+             logger.warning("No Gemini API key found. Using dummy response.")
+             return f"Updated {target_filename} (Simulated - No API Key)"
+            
+        global client
+        if not client:
+             client = genai.Client(api_key=settings.gemini_api_key)
+             
         wait_time = wait_for_gemini_api()
         if wait_time > 0:
             logger.info(f"Waited {wait_time:.1f} seconds due to rate limiting")

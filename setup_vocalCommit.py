@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 VocalCommit Setup Script
 Automated setup and dependency installation for VocalCommit
@@ -32,7 +32,7 @@ def check_prerequisites():
     
     # Check Python
     try:
-        result = run_command("python3 --version")
+        result = run_command("python --version")
         print(f"✅ Python: {result.stdout.strip()}")
     except:
         print("❌ Python 3 not found. Please install Python 3.8+")
@@ -67,7 +67,7 @@ def setup_backend():
     
     # Install Python dependencies
     print("Installing Python dependencies...")
-    run_command("python3 -m pip install -r requirements.txt", cwd=orchestrator_path)
+    run_command("python -m pip install -r requirements.txt", cwd=orchestrator_path)
     
     # Make start script executable
     start_script = orchestrator_path / "start_server.sh"
@@ -144,7 +144,7 @@ def print_startup_instructions():
     print()
     print("Terminal 1 - Backend Orchestrator:")
     print("  cd vocalCommit/orchestrator")
-    print("  python3 -m uvicorn core.main:app --host 0.0.0.0 --port 8000 --reload")
+    print("  python -m uvicorn core.main:app --host 0.0.0.0 --port 8000 --reload")
     print("  # OR use: ./start_server.sh")
     print()
     print("Terminal 2 - Voice Interface:")
