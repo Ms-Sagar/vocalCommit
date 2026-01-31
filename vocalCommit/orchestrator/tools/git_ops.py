@@ -19,8 +19,13 @@ class GitOperations:
         """
         if repo_path is None:
             # Default to the vocalCommit root directory
+            # Go up from orchestrator/tools/git_ops.py to the vocalCommit root
             current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            self.repo_path = current_dir
+            # Check if we're already in the vocalCommit directory or need to go up one more level
+            if os.path.basename(current_dir) == 'vocalCommit':
+                self.repo_path = os.path.dirname(current_dir)  # Go up one more level to the actual repo root
+            else:
+                self.repo_path = current_dir
         else:
             self.repo_path = repo_path
         
