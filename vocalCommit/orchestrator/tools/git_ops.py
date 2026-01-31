@@ -339,7 +339,8 @@ class GitOperations:
     
     def hard_rollback_last_commit(self, task_id: str) -> Dict[str, Any]:
         """
-        Hard rollback the last commit (completely undo changes).
+        Hard rollback the last commit (completely undo changes) - ONLY for VocalCommit files.
+        This is safer than a full hard reset as it only affects files that were in the commit.
         
         Args:
             task_id: Task identifier for logging
@@ -364,15 +365,38 @@ class GitOperations:
                     "last_commit": last_commit
                 }
             
-            # Perform hard reset to completely undo the commit and changes
-            reset_result = self._run_git_command(["reset", "--hard", "HEAD~1"])
+            # Get the files that were changed in the last commit
+            changed_files = last_commit.get("changed_files", [])
+            
+            if not changed_files:
+                return {
+                    "status": "error",
+                    "error": "No files found in the last commit to rollback"
+                }
+            
+            # First, soft reset to undo the commit
+            reset_result = self._run_git_command(["reset", "--soft", "HEAD~1"])
             
             if reset_result["status"] != "success":
                 return {
                     "status": "error",
-                    "error": f"Failed to hard rollback commit: {reset_result.get('stderr', 'Unknown error')}",
+                    "error": f"Failed to rollback commit: {reset_result.get('stderr', 'Unknown error')}",
                     "git_output": reset_result
                 }
+            
+            # Then, selectively discard changes only for the files that were in the commit
+            discarded_files = []
+            failed_files = []
+            
+            for file_path in changed_files:
+                # Check if file exists and restore it to HEAD state
+                checkout_result = self._run_git_command(["checkout", "HEAD", "--", file_path])
+                if checkout_result["status"] == "success":
+                    discarded_files.append(file_path)
+                    logger.info(f"Discarded changes for: {file_path}")
+                else:
+                    failed_files.append(file_path)
+                    logger.warning(f"Failed to discard changes for: {file_path}")
             
             logger.info(f"Successfully hard rolled back commit {last_commit['short_hash']} for task {task_id}")
             
@@ -380,9 +404,11 @@ class GitOperations:
                 "status": "success",
                 "rolled_back_commit": last_commit["short_hash"],
                 "commit_message": last_commit["commit_message"],
-                "changed_files": last_commit["changed_files"],
+                "changed_files": changed_files,
+                "discarded_files": discarded_files,
+                "failed_files": failed_files,
                 "task_id": task_id,
-                "message": f"Hard rolled back commit {last_commit['short_hash']}. All changes have been discarded."
+                "message": f"Hard rolled back commit {last_commit['short_hash']}. Discarded changes for {len(discarded_files)} files."
             }
             
         except Exception as e:

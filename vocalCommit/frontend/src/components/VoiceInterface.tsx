@@ -70,6 +70,8 @@ const VoiceInterface: React.FC = () => {
   const [filesGenerated, setFilesGenerated] = useState<{[key: string]: boolean}>({});
   const [completedTasks, setCompletedTasks] = useState<{[key: string]: AgentResponse}>({});
   const [commitActions, setCommitActions] = useState<{[key: string]: boolean}>({});
+  const [showCommitModal, setShowCommitModal] = useState(false);
+  const [currentCommitTask, setCurrentCommitTask] = useState<{taskId: string, task: AgentResponse} | null>(null);
   
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -130,11 +132,21 @@ const VoiceInterface: React.FC = () => {
           updateWorkflowStatus(response);
           
           // Handle completed tasks for commit approval
-          if (response.status === 'completed' && response.task_id && response.commit_info) {
+          if (response.status === 'completed' && response.task_id) {
+            console.log('Received completed task:', response.task_id, 'with commit_info:', response.commit_info);
             setCompletedTasks(prev => ({
               ...prev,
               [response.task_id!]: response
             }));
+            
+            // Show commit approval popup for successful commits
+            if (response.commit_info?.commit_hash) {
+              setCurrentCommitTask({
+                taskId: response.task_id,
+                task: response
+              });
+              setShowCommitModal(true);
+            }
           }
           
           // Handle commit approval/rollback notifications
@@ -146,6 +158,12 @@ const VoiceInterface: React.FC = () => {
                 delete updated[response.task_id!];
                 return updated;
               });
+              
+              // Close modal if it's for this task
+              if (currentCommitTask?.taskId === response.task_id) {
+                setShowCommitModal(false);
+                setCurrentCommitTask(null);
+              }
             }
           }
           
@@ -419,12 +437,17 @@ const VoiceInterface: React.FC = () => {
           transcript: `Approve commit for ${taskId}`
         }]);
 
-        // Remove from completed tasks
+        // Remove from completed tasks and close modal
         setCompletedTasks(prev => {
           const updated = { ...prev };
           delete updated[taskId];
           return updated;
         });
+        
+        if (currentCommitTask?.taskId === taskId) {
+          setShowCommitModal(false);
+          setCurrentCommitTask(null);
+        }
       } else {
         setMessages(prev => [...prev, {
           status: 'error',
@@ -470,16 +493,21 @@ const VoiceInterface: React.FC = () => {
         setMessages(prev => [...prev, {
           status: 'success',
           agent: 'Git System',
-          response: `🔄 **Commit Rolled Back**\n\nTask "${completedTasks[taskId]?.transcript}" has been rolled back.\n\n🔗 **Commit**: ${result.rolled_back_commit}\n\n${hardRollback ? '🗑️ **Hard Rollback**: All changes have been discarded' : '📝 **Soft Rollback**: Changes are now unstaged'}`,
+          response: `🔄 **Commit Rolled Back**\n\nTask "${completedTasks[taskId]?.transcript}" has been rolled back.\n\n🔗 **Commit**: ${result.rolled_back_commit}\n\n${hardRollback ? '🗑️ **Hard Rollback**: Only affected files discarded (safer)' : '📝 **Soft Rollback**: Changes are now unstaged'}`,
           transcript: `Rollback commit for ${taskId}`
         }]);
 
-        // Remove from completed tasks
+        // Remove from completed tasks and close modal
         setCompletedTasks(prev => {
           const updated = { ...prev };
           delete updated[taskId];
           return updated;
         });
+        
+        if (currentCommitTask?.taskId === taskId) {
+          setShowCommitModal(false);
+          setCurrentCommitTask(null);
+        }
       } else {
         setMessages(prev => [...prev, {
           status: 'error',
@@ -789,6 +817,112 @@ const VoiceInterface: React.FC = () => {
           </a>
         </div>
       </div>
+
+      {/* Commit Approval Modal */}
+      {showCommitModal && currentCommitTask && (
+        <div className="modal-overlay">
+          <div className="modal commit-approval-modal">
+            <div className="modal-header">
+              <h3>🔗 Commit Approval Required</h3>
+              <button onClick={() => { setShowCommitModal(false); setCurrentCommitTask(null); }} className="close-btn">
+                ×
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="commit-task-info">
+                <h4>{currentCommitTask.task.transcript}</h4>
+                <div className="task-id">Task ID: {currentCommitTask.taskId}</div>
+              </div>
+              
+              <div className="commit-details-modal">
+                {currentCommitTask.task.commit_info?.commit_hash ? (
+                  <>
+                    <div className="commit-hash-display">
+                      <strong>🔗 Commit Hash:</strong>
+                      <code>{currentCommitTask.task.commit_info.commit_hash}</code>
+                    </div>
+                    
+                    <div className="commit-timestamp-display">
+                      <strong>📅 Timestamp:</strong>
+                      {currentCommitTask.task.commit_info.timestamp}
+                    </div>
+                    
+                    {currentCommitTask.task.modified_files && currentCommitTask.task.modified_files.length > 0 && (
+                      <div className="modified-files-modal">
+                        <strong>📁 Modified Files ({currentCommitTask.task.modified_files.length}):</strong>
+                        <div className="file-list-modal">
+                          {currentCommitTask.task.modified_files.map((file, index) => (
+                            <div key={index} className="file-item">{file}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="commit-message-preview">
+                      <strong>💬 What was done:</strong>
+                      <p>{currentCommitTask.task.transcript}</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="commit-error-modal">
+                    ⚠️ Commit information not available
+                  </div>
+                )}
+              </div>
+              
+              <div className="rollback-explanation">
+                <h4>Choose your action:</h4>
+                <div className="action-explanations">
+                  <div className="action-explanation">
+                    <strong>✅ Approve:</strong> Keep the changes permanently (no rollback possible)
+                  </div>
+                  <div className="action-explanation">
+                    <strong>🔄 Soft Rollback:</strong> Undo the commit but keep changes as unstaged files
+                  </div>
+                  <div className="action-explanation">
+                    <strong>🗑️ Hard Rollback:</strong> Only discard the specific files that were changed (safer)
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              {currentCommitTask.task.commit_info?.commit_hash ? (
+                <>
+                  <button
+                    onClick={() => rollbackCommit(currentCommitTask.taskId, true)}
+                    disabled={commitActions[currentCommitTask.taskId]}
+                    className="rollback-hard-btn modal-btn"
+                  >
+                    {commitActions[currentCommitTask.taskId] ? '⏳ Processing...' : '🗑️ Hard Rollback'}
+                  </button>
+                  
+                  <button
+                    onClick={() => rollbackCommit(currentCommitTask.taskId, false)}
+                    disabled={commitActions[currentCommitTask.taskId]}
+                    className="rollback-soft-btn modal-btn"
+                  >
+                    {commitActions[currentCommitTask.taskId] ? '⏳ Processing...' : '🔄 Soft Rollback'}
+                  </button>
+                  
+                  <button
+                    onClick={() => approveCommit(currentCommitTask.taskId)}
+                    disabled={commitActions[currentCommitTask.taskId]}
+                    className="approve-btn modal-btn primary"
+                  >
+                    {commitActions[currentCommitTask.taskId] ? '⏳ Processing...' : '✅ Approve Commit'}
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => { setShowCommitModal(false); setCurrentCommitTask(null); }} className="cancel-btn modal-btn">
+                  Close
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

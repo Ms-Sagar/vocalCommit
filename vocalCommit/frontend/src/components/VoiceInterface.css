@@ -1899,3 +1899,278 @@
 .message:has(.agent-name:contains("Git System")) {
   border-left-color: #f57c00;
 }
+/* Commit Approval Modal Styles */
+.commit-approval-modal {
+  max-width: 600px;
+  width: 90%;
+}
+
+.commit-task-info {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.commit-task-info h4 {
+  margin: 0 0 8px 0;
+  color: #495057;
+  font-size: 1.1rem;
+}
+
+.commit-task-info .task-id {
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.commit-details-modal {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.commit-hash-display,
+.commit-timestamp-display {
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.commit-hash-display code {
+  background: #e9ecef;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  color: #007bff;
+  font-weight: 600;
+}
+
+.modified-files-modal {
+  margin-bottom: 15px;
+}
+
+.file-list-modal {
+  margin-top: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.file-item {
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85rem;
+  color: #495057;
+}
+
+.commit-message-preview {
+  background: #e7f3ff;
+  border: 1px solid #b8daff;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.commit-message-preview p {
+  margin: 5px 0 0 0;
+  color: #495057;
+  font-style: italic;
+}
+
+.commit-error-modal {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  color: #721c24;
+  padding: 15px;
+  border-radius: 6px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.rollback-explanation {
+  background: #fff8e1;
+  border: 1px solid #ffcc02;
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.rollback-explanation h4 {
+  margin: 0 0 12px 0;
+  color: #f57c00;
+  font-size: 1rem;
+}
+
+.action-explanations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.action-explanation {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.action-explanation strong {
+  color: #495057;
+}
+
+/* Modal button styles */
+.modal-btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 140px;
+}
+
+.modal-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.modal-btn.primary {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+}
+
+.modal-btn.primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+}
+
+.rollback-soft-btn.modal-btn {
+  background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+  color: #212529;
+}
+
+.rollback-soft-btn.modal-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(255, 193, 7, 0.3);
+}
+
+.rollback-hard-btn.modal-btn {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+}
+
+.rollback-hard-btn.modal-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3);
+}
+
+/* Modal footer for commit approval */
+.commit-approval-modal .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Responsive design for commit modal */
+@media (max-width: 768px) {
+  .commit-approval-modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+  
+  .commit-approval-modal .modal-footer {
+    flex-direction: column;
+  }
+  
+  .modal-btn {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .commit-hash-display,
+  .commit-timestamp-display {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+  
+  .action-explanations {
+    gap: 6px;
+  }
+  
+  .action-explanation {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+}
+
+/* Animation for modal appearance */
+.commit-approval-modal {
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Loading state for modal buttons */
+.modal-btn:disabled::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: auto;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+}
+
+/* Highlight effect for important actions */
+.modal-btn.primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.modal-btn.primary::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transition: left 0.5s;
+}
+
+.modal-btn.primary:hover::before {
+  left: 100%;
+}
