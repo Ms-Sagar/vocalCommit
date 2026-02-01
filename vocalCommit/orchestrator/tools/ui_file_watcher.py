@@ -100,7 +100,7 @@ class UIFileWatcher:
 
 def create_ui_watcher(todo_ui_path: str = "todo-ui/src") -> UIFileWatcher:
     """Create a UI file watcher for the todo-ui directory (production or local)."""
-    from ..core.config import settings
+    from core.config import settings
     from pathlib import Path
     
     # Check if production todo-ui exists (separate repo)

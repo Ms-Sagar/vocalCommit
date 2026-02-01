@@ -6,7 +6,7 @@ import requests
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from ..core.config import settings
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
