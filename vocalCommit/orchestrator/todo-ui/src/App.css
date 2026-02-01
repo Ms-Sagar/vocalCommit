@@ -833,17 +833,22 @@ body {
   color: var(--form-input-text);
 }
 
+/* Updated delete-btn for icon */
 .delete-btn {
   background: var(--delete-btn-bg);
   color: var(--text-light);
   border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 0.9rem;
+  width: 40px; /* Fixed width for a square button */
+  height: 40px; /* Fixed height for a square button */
+  padding: 0; /* No internal padding, size handled by width/height */
+  border-radius: 8px; /* Consistent with refresh-btn and other rounded elements */
+  font-size: 1.2rem; /* Size of the icon */
   cursor: pointer;
   transition: all 0.3s ease;
   flex-shrink: 0; /* Prevent button from shrinking */
-  min-width: fit-content; /* Ensure button doesn't get too small */
+  display: flex; /* Use flexbox to center the icon */
+  align-items: center;
+  justify-content: center;
 }
 
 .delete-btn:hover {
