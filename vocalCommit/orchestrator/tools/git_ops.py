@@ -184,24 +184,59 @@ class GitOperations:
         Args:
             message: Commit message
             task_id: Task identifier for tracking
-            modified_files: List of files that were modified
+            modified_files: List of files that were modified (may be relative paths)
             
         Returns:
             Dict containing commit result
         """
         try:
-            # First, stage the modified files
-            if modified_files:
-                stage_result = self.stage_files(modified_files)
-                if stage_result["status"] == "error":
-                    return {
-                        "status": "error",
-                        "error": f"Failed to stage files: {stage_result['error']}"
-                    }
+            # Resolve file paths to be relative to repository root
+            resolved_files = []
+            for file_path in modified_files:
+                # Handle different path formats from dev agent
+                resolved_path = None
+                
+                # Try different path combinations to find the actual file
+                possible_paths = [
+                    file_path,  # Original path
+                    f"vocalCommit/orchestrator/todo-ui/{file_path}",  # Full path with original
+                    f"vocalCommit/orchestrator/todo-ui/src/{file_path}",  # Full path, add src/
+                ]
+                
+                # If it doesn't start with src/, try adding src/
+                if not file_path.startswith('src/'):
+                    possible_paths.append(f"vocalCommit/orchestrator/todo-ui/src/{file_path}")
+                
+                # Find which path actually exists
+                for test_path in possible_paths:
+                    full_path = self.repo_path / test_path
+                    if full_path.exists():
+                        resolved_path = test_path
+                        break
+                
+                if resolved_path:
+                    resolved_files.append(resolved_path)
+                    logger.info(f"Resolved file path: {file_path} -> {resolved_path}")
+                else:
+                    logger.warning(f"File not found for commit: {file_path} (tried {len(possible_paths)} paths)")
+            
+            if not resolved_files:
+                return {
+                    "status": "error",
+                    "error": f"No valid files found to commit from: {modified_files}"
+                }
+            
+            # Stage the resolved files
+            stage_result = self.stage_files(resolved_files)
+            if stage_result["status"] == "error":
+                return {
+                    "status": "error",
+                    "error": f"Failed to stage files: {stage_result['error']}"
+                }
             
             # Create commit message with task context
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            commit_message = f"[VocalCommit] {message}\n\nTask ID: {task_id}\nTimestamp: {timestamp}\nFiles modified: {len(modified_files)}"
+            commit_message = f"[VocalCommit] {message}\n\nTask ID: {task_id}\nTimestamp: {timestamp}\nFiles modified: {len(resolved_files)}"
             
             # Commit the changes
             result = self._run_git_command(["commit", "-m", commit_message])
@@ -223,7 +258,7 @@ class GitOperations:
                 "status": "success",
                 "commit_hash": commit_hash,
                 "commit_message": commit_message,
-                "modified_files": modified_files,
+                "modified_files": resolved_files,
                 "task_id": task_id,
                 "timestamp": timestamp
             }
