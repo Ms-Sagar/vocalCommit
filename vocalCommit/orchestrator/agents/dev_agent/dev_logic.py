@@ -269,12 +269,12 @@ OUTPUT REQUIREMENTS:
         
         # 3. RATE LIMITING - Wait if needed before calling Gemini
         if not settings.gemini_api_key:
-             logger.warning("No Gemini API key found. Using dummy response.")
-             return f"Updated {target_filename} (Simulated - No API Key)"
+            logger.warning("No Gemini API key found. Using dummy response.")
+            return f"Updated {target_filename} (Simulated - No API Key)"
             
         global client
         if not client:
-             client = genai.Client(api_key=settings.gemini_api_key)
+            client = genai.Client(api_key=settings.gemini_api_key)
              
         wait_time = wait_for_gemini_api()
         if wait_time > 0:

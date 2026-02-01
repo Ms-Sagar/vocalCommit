@@ -78,6 +78,15 @@ npm run dev
 - **File Generation**: Export generated code to frontend
 - **UI File Watching**: Automatic detection of todo-ui changes
 
+### Git Integration & Commit Workflow
+- **Automatic Commits**: Changes are automatically committed after successful task completion
+- **Commit Approval**: Review and approve commits before finalizing
+- **Rollback Options**: 
+  - **Soft Rollback**: Keeps changes as unstaged files
+  - **Hard Rollback**: Completely discards all changes
+- **Commit History**: Track all VocalCommit-generated commits
+- **Git Status**: Monitor repository status and changes
+
 ## 🛠️ Architecture
 
 ```
@@ -108,9 +117,13 @@ npm run dev
 ### 2. Workflow Process
 
 1. **Voice Input** → PM Agent creates task plan
-2. **Manual Approval** → Review and approve/reject plans
-3. **Development** → Dev Agent generates code or modifies UI
-4. **File Generation** → Export code to frontend (optional)
+2. **Automatic Development** → Dev Agent generates code or modifies UI
+3. **Testing & Validation** → Testing Agent validates changes
+4. **Git Commit** → Changes are automatically committed
+5. **Commit Approval** → Review commit and choose to approve or rollback
+   - **Approve**: Finalizes the commit (no rollback available)
+   - **Soft Rollback**: Undoes commit but keeps changes as unstaged files
+   - **Hard Rollback**: Completely discards all changes
 
 ### 3. Todo UI Management
 
@@ -118,6 +131,12 @@ npm run dev
 - Real-time updates from voice commands
 - Theme toggle (light/dark mode)
 - CRUD operations with optimistic updates
+
+### 4. Git Operations
+
+- **Commit History**: View recent commits with VocalCommit tags
+- **Repository Status**: Check current git status and pending changes
+- **Rollback Management**: Safely undo changes when needed
 
 ## 🔧 Configuration
 
@@ -289,6 +308,15 @@ curl -I http://localhost:5174  # Todo UI
 - **`POST /todos`**: Create manual todo
 - **`PUT /todos/{id}`**: Update todo
 - **`DELETE /todos/{id}`**: Delete todo
+
+### Git Operations Endpoints
+
+- **`GET /git-status`**: Get current repository status
+- **`GET /commit-history`**: Get recent commit history
+- **`GET /last-commit`**: Get last commit information
+- **`POST /approve-commit/{task_id}`**: Approve a task's commit
+- **`POST /rollback-commit/{task_id}`**: Rollback a task's commit
+  - Query parameter: `hard_rollback=true/false`
 
 ## 🤝 Contributing
 
