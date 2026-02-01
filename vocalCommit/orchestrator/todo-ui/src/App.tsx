@@ -205,6 +205,11 @@ const TodoCard: React.FC<TodoCardProps> = ({ todo, isBusy, toggleTodoStatus, del
         </div>
       </div>
       <p className="todo-description">{todo.description}</p>
+      {/* NEW: Added timestamps for enhanced display, contributing to a "cool" and informative look */}
+      <div className="todo-timestamps">
+        <span className="timestamp-created">Created: {new Date(todo.createdAt).toLocaleString()}</span>
+        <span className="timestamp-updated">Updated: {new Date(todo.updatedAt).toLocaleString()}</span>
+      </div>
       <div className="todo-actions">
         <div className="status-controls">
           <label htmlFor={`status-${todo.id}`}>Status:</label>

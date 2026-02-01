@@ -261,6 +261,8 @@ body {
   padding: 25px;
   box-shadow: var(--shadow-card);
   border: 1px solid var(--border-base);
+  /* Add a left border for visual emphasis of status */
+  border-left: 5px solid var(--border-base); 
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -273,7 +275,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 15px;
+  margin-bottom: 15px; /* Keep initial margin for header */
   flex-wrap: wrap;
   gap: 10px;
 }
@@ -283,12 +285,14 @@ body {
   color: var(--text-primary);
   font-size: 1.3rem;
   flex: 1;
+  min-width: 0; /* Allow title to shrink if badges are long */
 }
 
 .todo-badges {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center; /* Align badges vertically */
 }
 
 .status-badge, .priority-badge {
@@ -303,14 +307,17 @@ body {
 .todo-description {
   color: var(--text-secondary);
   line-height: 1.6;
-  margin-bottom: 20px;
+  margin-bottom: 20px; /* Standardize spacing */
 }
 
-.todo-files, .todo-dependencies {
-  margin-bottom: 15px;
+/* Grouped for consistent bottom margin for main content sections */
+.todo-notes,
+.todo-files, 
+.todo-dependencies {
+  margin-bottom: 20px; /* Standardize spacing */
 }
 
-.todo-files h4, .todo-dependencies h4 {
+.todo-files h4, .todo-dependencies h4, .todo-notes h4 {
   margin: 0 0 8px 0;
   color: var(--text-primary);
   font-size: 0.9rem;
@@ -340,7 +347,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 20px;
+  margin-top: 20px; /* Spacing from the section above */
   padding-top: 15px;
   border-top: 1px solid var(--border-base);
   flex-wrap: wrap;
@@ -465,20 +472,12 @@ body {
   transform: translateY(-2px);
 }
 
-.todo-notes {
-  margin-bottom: 15px;
-}
-
-.todo-notes h4 {
-  margin: 0 0 8px 0;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-}
-
+/* Moved .todo-notes margin-bottom definition up with other content sections */
 .todo-notes ul {
   margin: 0;
   padding-left: 20px;
   color: var(--text-secondary);
+  list-style-type: disc; /* Ensure bullet points are visible */
 }
 
 .todo-notes li {
@@ -488,7 +487,12 @@ body {
 }
 
 .todo-actions {
-  margin-bottom: 15px;
+  display: flex; /* Added for alignment of action elements */
+  align-items: center; /* Added for vertical alignment of action elements */
+  justify-content: space-between; /* Added to spread action elements */
+  gap: 15px; /* Added for spacing between action elements */
+  flex-wrap: wrap; /* Added for responsiveness */
+  margin-bottom: 20px; /* Standardize spacing before border */
   padding-bottom: 15px;
   border-bottom: 1px solid var(--border-base);
 }
@@ -506,6 +510,8 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0; /* Prevent button from shrinking */
+  min-width: fit-content; /* Ensure button doesn't get too small */
 }
 
 .generate-files-btn:hover:not(:disabled) {
@@ -815,6 +821,7 @@ body {
 .status-controls label {
   font-weight: 500;
   color: var(--form-label-text);
+  flex-shrink: 0; /* Prevent label from shrinking */
 }
 
 .status-controls select {
@@ -835,6 +842,8 @@ body {
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.3s ease;
+  flex-shrink: 0; /* Prevent button from shrinking */
+  min-width: fit-content; /* Ensure button doesn't get too small */
 }
 
 .delete-btn:hover {
@@ -870,18 +879,20 @@ body {
     width: 100%;
   }
   
-  .todo-actions {
+  /* .todo-actions flex-wrap handles this automatically but can be refined if needed */
+  /* .todo-actions {
     flex-direction: column;
     align-items: stretch;
-  }
+  } */
   
   .status-controls {
     justify-content: space-between;
   }
   
-  .delete-btn {
+  /* .delete-btn also handles wrapping due to flex-wrap on parent */
+  /* .delete-btn {
     width: 100%;
-  }
+  } */
   
   .header {
     flex-direction: column;
