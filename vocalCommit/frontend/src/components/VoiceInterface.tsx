@@ -59,6 +59,22 @@ interface TaskWorkflow {
   };
 }
 
+// Define API and WebSocket URLs from environment variables or defaults
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Helper to derive WS URL from API URL if WS_URL is not explicitly provided
+const getWsUrl = () => {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  // Remove trailing slash if present
+  const cleanBase = API_BASE_URL.replace(/\/$/, '');
+  // Switch protocol: http -> ws, https -> wss
+  const wsProtocol = cleanBase.startsWith('https') ? 'wss' : 'ws';
+  const wsBase = cleanBase.replace(/^https?/, wsProtocol);
+  return `${wsBase}/ws`;
+};
+
+const WS_URL = getWsUrl();
+
 const VoiceInterface: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -66,13 +82,13 @@ const VoiceInterface: React.FC = () => {
   const [activeWorkflows, setActiveWorkflows] = useState<TaskWorkflow[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
-  const [generatingFiles, setGeneratingFiles] = useState<{[key: string]: boolean}>({});
-  const [filesGenerated, setFilesGenerated] = useState<{[key: string]: boolean}>({});
-  const [completedTasks, setCompletedTasks] = useState<{[key: string]: AgentResponse}>({});
-  const [commitActions, setCommitActions] = useState<{[key: string]: boolean}>({});
+  const [generatingFiles, setGeneratingFiles] = useState<{ [key: string]: boolean }>({});
+  const [filesGenerated, setFilesGenerated] = useState<{ [key: string]: boolean }>({});
+  const [completedTasks, setCompletedTasks] = useState<{ [key: string]: AgentResponse }>({});
+  const [commitActions, setCommitActions] = useState<{ [key: string]: boolean }>({});
   const [showCommitModal, setShowCommitModal] = useState(false);
-  const [currentCommitTask, setCurrentCommitTask] = useState<{taskId: string, task: AgentResponse} | null>(null);
-  
+  const [currentCommitTask, setCurrentCommitTask] = useState<{ taskId: string, task: AgentResponse } | null>(null);
+
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -81,7 +97,7 @@ const VoiceInterface: React.FC = () => {
     const stepMap: { [key: string]: string } = {
       'pm_completed': 'PM Analysis Complete',
       'pm_analysis': 'PM Analysis',
-      'dev_completed': 'Development Complete', 
+      'dev_completed': 'Development Complete',
       'dev_analysis': 'Development Analysis',
       'dev_implementation': 'Development Implementation',
       'security_completed': 'Security Review Complete',
@@ -92,7 +108,7 @@ const VoiceInterface: React.FC = () => {
       'testing': 'Testing Phase',
       'deployment': 'Deployment Phase'
     };
-    
+
     return stepMap[step] || step.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
@@ -108,29 +124,29 @@ const VoiceInterface: React.FC = () => {
       'manual_review': 'Manual Review',
       'final_review': 'Final Review'
     };
-    
+
     return agentMap[nextStep] || nextStep.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
   useEffect(() => {
     // Initialize WebSocket connection
     const connectWebSocket = () => {
-      const ws = new WebSocket('ws://localhost:8000/ws');
-      
+      const ws = new WebSocket(WS_URL);
+
       ws.onopen = () => {
         setIsConnected(true);
         setConnectionStatus('Connected to VocalCommit Orchestrator');
         console.log('Connected to VocalCommit WebSocket');
       };
-      
+
       ws.onmessage = (event) => {
         try {
           const response: AgentResponse = JSON.parse(event.data);
           setMessages(prev => [...prev, response]);
-          
+
           // Update workflow tracking
           updateWorkflowStatus(response);
-          
+
           // Handle completed tasks for commit approval
           if (response.status === 'completed' && response.task_id) {
             console.log('Received completed task:', response.task_id, 'with commit_info:', response.commit_info);
@@ -138,7 +154,7 @@ const VoiceInterface: React.FC = () => {
               ...prev,
               [response.task_id!]: response
             }));
-            
+
             // Show commit approval popup for successful commits
             if (response.commit_info?.commit_hash) {
               setCurrentCommitTask({
@@ -148,7 +164,7 @@ const VoiceInterface: React.FC = () => {
               setShowCommitModal(true);
             }
           }
-          
+
           // Handle commit approval/rollback notifications
           if (response.status === 'rolled_back' || response.status === 'approved') {
             // Remove from completed tasks
@@ -158,7 +174,7 @@ const VoiceInterface: React.FC = () => {
                 delete updated[response.task_id!];
                 return updated;
               });
-              
+
               // Close modal if it's for this task
               if (currentCommitTask?.taskId === response.task_id) {
                 setShowCommitModal(false);
@@ -166,8 +182,7 @@ const VoiceInterface: React.FC = () => {
               }
             }
           }
-          
-          // Clear any processing states when task completes
+
           if (response.status === 'completed' || response.status === 'rejected') {
             // Task completed, no additional cleanup needed
           }
@@ -175,7 +190,7 @@ const VoiceInterface: React.FC = () => {
           console.error('Error parsing WebSocket message:', error);
         }
       };
-      
+
       ws.onclose = () => {
         setIsConnected(false);
         setConnectionStatus('Disconnected - Attempting to reconnect...');
@@ -183,12 +198,12 @@ const VoiceInterface: React.FC = () => {
         // Attempt to reconnect after 3 seconds
         setTimeout(connectWebSocket, 3000);
       };
-      
+
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
         setConnectionStatus('Connection Error');
       };
-      
+
       wsRef.current = ws;
     };
 
@@ -198,20 +213,20 @@ const VoiceInterface: React.FC = () => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
-      
+
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = 'en-US';
-      
+
       recognition.onstart = () => {
         setIsListening(true);
         setTranscript('Listening...');
       };
-      
+
       recognition.onresult = (event) => {
         const result = event.results[0][0].transcript;
         setTranscript(result);
-        
+
         // Send to VocalCommit orchestrator
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           const message: VoiceMessage = {
@@ -219,21 +234,21 @@ const VoiceInterface: React.FC = () => {
             transcript: result,
             timestamp: new Date().toISOString()
           };
-          
+
           wsRef.current.send(JSON.stringify(message));
         }
       };
-      
+
       recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
         setTranscript(`Error: ${event.error}`);
       };
-      
+
       recognition.onend = () => {
         setIsListening(false);
       };
-      
+
       recognitionRef.current = recognition;
     }
 
@@ -251,7 +266,7 @@ const VoiceInterface: React.FC = () => {
 
     setActiveWorkflows(prev => {
       const existing = prev.find(w => w.task_id === response.task_id);
-      
+
       if (!existing) {
         // Create new workflow with simplified steps (no dev approval)
         const newWorkflow: TaskWorkflow = {
@@ -281,7 +296,7 @@ const VoiceInterface: React.FC = () => {
           if (workflow.task_id !== response.task_id) return workflow;
 
           const updated = { ...workflow };
-          
+
           if (response.status === 'processing') {
             // Dev Agent is processing
             updated.steps[0].status = 'completed';
@@ -295,7 +310,7 @@ const VoiceInterface: React.FC = () => {
             updated.steps[3].status = 'completed'; // Commit
             updated.steps[4].status = 'awaiting_commit_approval'; // Commit Approval
             updated.current_step = 4;
-            
+
             // Store commit info
             if (response.commit_info) {
               updated.commit_info = response.commit_info;
@@ -335,13 +350,13 @@ const VoiceInterface: React.FC = () => {
         transcript: transcript.trim(),
         timestamp: new Date().toISOString()
       };
-      
+
       wsRef.current.send(JSON.stringify(message));
       setTranscript('');
     }
   };
 
-  // Removed approval handling since dev approval is no longer required
+  // Removed handleApproval since dev approval is no longer required
 
   const generateFilesForTask = async (taskId: string) => {
     // Prevent multiple clicks
@@ -364,23 +379,23 @@ const VoiceInterface: React.FC = () => {
         transcript: `Generate files for ${taskId}`
       }]);
 
-      const response = await fetch(`http://localhost:8000/generate-files/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/generate-files/${taskId}`, {
         method: 'POST'
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+
       const result = await response.json();
-      
+
       if (result.status === 'success') {
         // Mark files as generated for this task
         setFilesGenerated(prev => ({
           ...prev,
           [taskId]: true
         }));
-        
+
         setMessages(prev => [...prev, {
           status: 'success',
           agent: 'File Generator',
@@ -413,13 +428,15 @@ const VoiceInterface: React.FC = () => {
     }
   };
 
+  // Removed startEditingWorkflow and saveWorkflowEdit since approvals are no longer required
+
   const approveCommit = async (taskId: string) => {
     if (commitActions[taskId]) return;
 
     try {
       setCommitActions(prev => ({ ...prev, [taskId]: true }));
 
-      const response = await fetch(`http://localhost:8000/approve-commit/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/approve-commit/${taskId}`, {
         method: 'POST'
       });
 
@@ -443,7 +460,7 @@ const VoiceInterface: React.FC = () => {
           delete updated[taskId];
           return updated;
         });
-        
+
         if (currentCommitTask?.taskId === taskId) {
           setShowCommitModal(false);
           setCurrentCommitTask(null);
@@ -479,7 +496,7 @@ const VoiceInterface: React.FC = () => {
     try {
       setCommitActions(prev => ({ ...prev, [taskId]: true }));
 
-      const response = await fetch(`http://localhost:8000/rollback-commit/${taskId}?hard_rollback=${hardRollback}`, {
+      const response = await fetch(`${API_BASE_URL}/rollback-commit/${taskId}?hard_rollback=${hardRollback}`, {
         method: 'POST'
       });
 
@@ -503,7 +520,7 @@ const VoiceInterface: React.FC = () => {
           delete updated[taskId];
           return updated;
         });
-        
+
         if (currentCommitTask?.taskId === taskId) {
           setShowCommitModal(false);
           setCurrentCommitTask(null);
@@ -533,8 +550,6 @@ const VoiceInterface: React.FC = () => {
     }
   };
 
-  // Removed workflow editing functions since approvals are no longer required
-
   return (
     <div className="voice-interface">
       <div className="header">
@@ -555,12 +570,12 @@ const VoiceInterface: React.FC = () => {
                   <h4>{workflow.transcript}</h4>
                   <span className="task-id">ID: {workflow.task_id}</span>
                 </div>
-                
+
                 <div className="workflow-progress">
                   <div className="progress-steps">
                     {workflow.steps.map((step, index) => (
-                      <div 
-                        key={step.id} 
+                      <div
+                        key={step.id}
                         className={`progress-step ${step.status} ${index === workflow.current_step ? 'current' : ''}`}
                       >
                         <div className="step-indicator">
@@ -578,16 +593,14 @@ const VoiceInterface: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                  
+
                   <div className="progress-bar">
-                    <div 
-                      className="progress-fill" 
+                    <div
+                      className="progress-fill"
                       style={{ width: `${(workflow.current_step / (workflow.steps.length - 1)) * 100}%` }}
                     ></div>
                   </div>
                 </div>
-
-                {/* Workflow feedback removed since no approvals needed */}
               </div>
             ))}
           </div>
@@ -605,7 +618,7 @@ const VoiceInterface: React.FC = () => {
                   <h4>{task.transcript}</h4>
                   <span className="task-id">ID: {taskId}</span>
                 </div>
-                
+
                 <div className="commit-info">
                   {task.commit_info?.commit_hash && (
                     <div className="commit-details">
@@ -617,7 +630,7 @@ const VoiceInterface: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  
+
                   {task.modified_files && task.modified_files.length > 0 && (
                     <div className="modified-files">
                       <strong>📁 Modified Files ({task.modified_files.length}):</strong>
@@ -641,7 +654,7 @@ const VoiceInterface: React.FC = () => {
                   >
                     {commitActions[taskId] ? '⏳ Approving...' : '✅ Approve Commit'}
                   </button>
-                  
+
                   <button
                     onClick={() => rollbackCommit(taskId, false)}
                     disabled={commitActions[taskId]}
@@ -649,7 +662,7 @@ const VoiceInterface: React.FC = () => {
                   >
                     {commitActions[taskId] ? '⏳ Rolling back...' : '🔄 Soft Rollback'}
                   </button>
-                  
+
                   <button
                     onClick={() => rollbackCommit(taskId, true)}
                     disabled={commitActions[taskId]}
@@ -661,7 +674,7 @@ const VoiceInterface: React.FC = () => {
 
                 <div className="rollback-info">
                   <small>
-                    <strong>Soft Rollback:</strong> Keeps changes as unstaged files<br/>
+                    <strong>Soft Rollback:</strong> Keeps changes as unstaged files<br />
                     <strong>Hard Rollback:</strong> Completely discards all changes
                   </small>
                 </div>
@@ -671,26 +684,24 @@ const VoiceInterface: React.FC = () => {
         </div>
       )}
 
-      {/* Pending Approvals Section - Removed since dev approval is no longer required */}
-
       <div className="voice-controls">
         <div className="transcript-section">
           <h3>Voice Input</h3>
           <div className="transcript-display">
             {transcript || 'Click "Start Listening" to begin voice commands...'}
           </div>
-          
+
           <div className="control-buttons">
-            <button 
-              onClick={startListening} 
+            <button
+              onClick={startListening}
               disabled={isListening || !isConnected}
               className={`voice-btn ${isListening ? 'listening' : ''}`}
             >
               {isListening ? '🎤 Listening...' : '🎤 Start Listening'}
             </button>
-            
-            <button 
-              onClick={stopListening} 
+
+            <button
+              onClick={stopListening}
               disabled={!isListening}
               className="voice-btn stop"
             >
@@ -710,7 +721,7 @@ const VoiceInterface: React.FC = () => {
               className="text-input"
               onKeyPress={(e) => e.key === 'Enter' && sendTextCommand()}
             />
-            <button 
+            <button
               onClick={sendTextCommand}
               disabled={!isConnected || !transcript.trim()}
               className="send-btn"
@@ -730,91 +741,93 @@ const VoiceInterface: React.FC = () => {
             </div>
           ) : (
             messages
-              .filter(message => 
+              .filter(message =>
                 // Only show actual agent responses, not system status updates
-                message.agent && 
+                message.agent &&
                 !message.response.includes('🔄 **Processing**') &&
                 !message.response.includes('📁 Modified') &&
                 !message.response.includes('🌐 View changes')
               )
               .map((message, index) => (
-              <div key={index} className={`message ${message.requires_approval ? 'pending-approval' : ''}`}>
-                <div className="message-header">
-                  <span className="agent-name">{message.agent || 'Orchestrator'}</span>
-                  <span className={`message-status ${message.status}`}>{message.status}</span>
-                </div>
-                <div className="message-content">
-                  {/* Clean up the response to focus on agent communication */}
-                  {message.response
-                    .replace(/📁 \*\*Files to Modify\*\*:.*?\n\n/gs, '')
-                    .replace(/🔄 \*\*Status\*\*:.*?\n/g, '')
-                    .replace(/💡 \*\*Updates\*\*:.*?\n/g, '')
-                    .replace(/✨ \*\*Task ID\*\*:.*$/g, '')
-                    .replace(/💡 \*\*Task ID\*\*:.*$/g, '')
-                    .trim()
-                  }
-                </div>
-                
-                {message.transcript && (
-                  <div className="original-command">
-                    Original: "{message.transcript}"
+                <div key={index} className={`message ${message.requires_approval ? 'pending-approval' : ''}`}>
+                  <div className="message-header">
+                    <span className="agent-name">{message.agent || 'Orchestrator'}</span>
+                    <span className={`message-status ${message.status}`}>{message.status}</span>
                   </div>
-                )}
-              </div>
-            ))
+                  <div className="message-content">
+                    {/* Clean up the response to focus on agent communication */}
+                    {message.response
+                      .replace(/📁 \*\*Files to Modify\*\*:.*?\n\n/gs, '')
+                      .replace(/🔄 \*\*Status\*\*:.*?\n/g, '')
+                      .replace(/💡 \*\*Updates\*\*:.*?\n/g, '')
+                      .replace(/✨ \*\*Task ID\*\*:.*$/g, '')
+                      .replace(/💡 \*\*Task ID\*\*:.*$/g, '')
+                      .trim()
+                    }
+                  </div>
+
+                  {/* Testing Results Display */}
+                  {message.test_results && (
+                    <div className="testing-results">
+                      <h4>🧪 Testing Results</h4>
+                      <div className="test-summary">
+                        <div className={`test-status ${message.test_results.status}`}>
+                          Status: {message.test_results.status.toUpperCase()}
+                        </div>
+                        <div className="test-assessment">
+                          {message.test_results.overall_assessment}
+                        </div>
+                      </div>
+
+                      {message.test_results.tests_run && message.test_results.tests_run.length > 0 && (
+                        <div className="tests-executed">
+                          <strong>Tests Executed:</strong>
+                          <div className="test-badges">
+                            {message.test_results.tests_run.map((test, idx) => (
+                              <span key={idx} className="test-badge">
+                                {test === 'syntax_validation' && '📝 Syntax'}
+                                {test === 'build_test' && '🔨 Build'}
+                                {test === 'functional_validation' && '⚙️ Functional'}
+                                {!['syntax_validation', 'build_test', 'functional_validation'].includes(test) && test}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Detailed Test Results */}
+                      <div className="detailed-test-results">
+                        {message.test_results.syntax_validation && (
+                          <div className="test-detail">
+                            <strong>📝 Syntax Validation:</strong>
+                            <pre>{JSON.stringify(message.test_results.syntax_validation, null, 2)}</pre>
+                          </div>
+                        )}
+
+                        {message.test_results.build_test && (
+                          <div className="test-detail">
+                            <strong>🔨 Build Test:</strong>
+                            <pre>{JSON.stringify(message.test_results.build_test, null, 2)}</pre>
+                          </div>
+                        )}
+
+                        {message.test_results.functional_validation && (
+                          <div className="test-detail">
+                            <strong>⚙️ Functional Validation:</strong>
+                            <pre>{JSON.stringify(message.test_results.functional_validation, null, 2)}</pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {message.transcript && (
+                    <div className="original-command">
+                      Original: "{message.transcript}"
+                    </div>
+                  )}
+                </div>
+              ))
           )}
-        </div>
-      </div>
-
-      <div className="agent-status">
-        <h3>Available Agents</h3>
-        <div className="agents-grid">
-          <div className="agent-card active">
-            <h4>🎯 PM Agent</h4>
-            <p>Task planning and project coordination</p>
-            <span className="agent-status-badge">Active</span>
-          </div>
-          <div className="agent-card active">
-            <h4>💻 Dev Agent</h4>
-            <p>AI-powered code generation with multi-file coordination</p>
-            <span className="agent-status-badge">Active</span>
-          </div>
-          <div className="agent-card active">
-            <h4>🧪 Testing Agent</h4>
-            <p>Automated testing, validation & quality assurance</p>
-            <span className="agent-status-badge">Active</span>
-          </div>
-          <div className="agent-card disabled">
-            <h4>🔒 Security Agent</h4>
-            <p>Code vulnerability scanning</p>
-            <span className="agent-status-badge">Disabled</span>
-          </div>
-          <div className="agent-card disabled">
-            <h4>🚀 DevOps Agent</h4>
-            <p>Deployment and operations</p>
-            <span className="agent-status-badge">Disabled</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="footer-links">
-        <h3>System Links</h3>
-        <div className="links-grid">
-          <a href="http://localhost:5174" target="_blank" className="link-card">
-            <h4>📋 Todo UI</h4>
-            <p>View generated tasks and progress</p>
-            <span>localhost:5174</span>
-          </a>
-          <a href="http://localhost:8000/health" target="_blank" className="link-card">
-            <h4>🔧 API Health</h4>
-            <p>Check orchestrator status</p>
-            <span>localhost:8000/health</span>
-          </a>
-          <a href="http://localhost:8000/pending-approvals" target="_blank" className="link-card">
-            <h4>⏳ Pending Approvals</h4>
-            <p>View pending approvals JSON</p>
-            <span>localhost:8000/pending-approvals</span>
-          </a>
         </div>
       </div>
 
@@ -828,13 +841,13 @@ const VoiceInterface: React.FC = () => {
                 ×
               </button>
             </div>
-            
-            <div className="modal-body">
+
+            <div className="modal-content">
               <div className="commit-task-info">
                 <h4>{currentCommitTask.task.transcript}</h4>
                 <div className="task-id">Task ID: {currentCommitTask.taskId}</div>
               </div>
-              
+
               <div className="commit-details-modal">
                 {currentCommitTask.task.commit_info?.commit_hash ? (
                   <>
@@ -842,12 +855,12 @@ const VoiceInterface: React.FC = () => {
                       <strong>🔗 Commit Hash:</strong>
                       <code>{currentCommitTask.task.commit_info.commit_hash}</code>
                     </div>
-                    
+
                     <div className="commit-timestamp-display">
                       <strong>📅 Timestamp:</strong>
                       {currentCommitTask.task.commit_info.timestamp}
                     </div>
-                    
+
                     {currentCommitTask.task.modified_files && currentCommitTask.task.modified_files.length > 0 && (
                       <div className="modified-files-modal">
                         <strong>📁 Modified Files ({currentCommitTask.task.modified_files.length}):</strong>
@@ -858,7 +871,7 @@ const VoiceInterface: React.FC = () => {
                         </div>
                       </div>
                     )}
-                    
+
                     <div className="commit-message-preview">
                       <strong>💬 What was done:</strong>
                       <p>{currentCommitTask.task.transcript}</p>
@@ -870,7 +883,7 @@ const VoiceInterface: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               <div className="rollback-explanation">
                 <h4>Choose your action:</h4>
                 <div className="action-explanations">
@@ -886,7 +899,7 @@ const VoiceInterface: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="modal-footer">
               {currentCommitTask.task.commit_info?.commit_hash ? (
                 <>
@@ -897,7 +910,7 @@ const VoiceInterface: React.FC = () => {
                   >
                     {commitActions[currentCommitTask.taskId] ? '⏳ Processing...' : '🗑️ Hard Rollback'}
                   </button>
-                  
+
                   <button
                     onClick={() => rollbackCommit(currentCommitTask.taskId, false)}
                     disabled={commitActions[currentCommitTask.taskId]}
@@ -905,7 +918,7 @@ const VoiceInterface: React.FC = () => {
                   >
                     {commitActions[currentCommitTask.taskId] ? '⏳ Processing...' : '🔄 Soft Rollback'}
                   </button>
-                  
+
                   <button
                     onClick={() => approveCommit(currentCommitTask.taskId)}
                     disabled={commitActions[currentCommitTask.taskId]}

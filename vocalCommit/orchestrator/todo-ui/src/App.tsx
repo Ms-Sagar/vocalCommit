@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // For generating temporary IDs
 import './App.css'; // Import the CSS styles
 import RefreshButton from './components/RefreshButton'; // NEW: Import the RefreshButton component
+import HelloButton from './components/HelloButton'; // NEW: Import the HelloButton component
 
 // --- Types ---
 type Filter = 'all' | 'completed' | 'active';
@@ -465,6 +466,10 @@ function App() {
     );
   }, [todos, addToast, handleCrudOperation]);
 
+  // --- New: Say Hello handler ---
+  const handleSayHello = useCallback(() => {
+    addToast('Hello from Todo App!', 'success');
+  }, [addToast]);
 
   // --- Filtering Logic ---
   const filteredTodos = todos.filter((todo) => {
@@ -494,6 +499,7 @@ function App() {
               <Spinner size="1em" color="var(--text-color-secondary)" /> Refreshing...
             </div>
           )}
+          <HelloButton onClick={handleSayHello} /> {/* NEW: Hello button */}
           {/* Theme Toggle Button has been removed */}
           <RefreshButton
             onClick={() => fetchTodos(true)}

@@ -1,0 +1,63 @@
+/* src/components/HelloButton.css */
+
+.hello-button {
+  background-color: var(--primary-color, #007bff); /* Use the primary color defined in App.css */
+  color: white; /* Text color for the primary button */
+  border: 1px solid var(--primary-color, #007bff); /* Border color matches the background */
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 16px); /* Consistent padding using spacing variables */
+  border-radius: var(--border-radius, 0.25rem); /* Global border radius for consistency */
+  font-size: var(--font-size-base, 1rem); /* Base font size */
+  font-family: var(--font-family-base, 'Inter', sans-serif); /* Use the global font family */
+  cursor: pointer;
+  transition: background-color var(--transition-speed, 0.3s) ease,
+              border-color var(--transition-speed, 0.3s) ease,
+              transform 0.1s ease,
+              box-shadow var(--transition-speed, 0.3s) ease; /* Smooth transitions for visual feedback */
+  outline: none; /* Remove default focus outline for custom styling */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm, 8px); /* Space between text and potential icon */
+  -webkit-appearance: none; /* Reset default button styles for cross-browser consistency */
+  -moz-appearance: none;
+  appearance: none;
+  box-shadow: var(--box-shadow, 0 .125rem .25rem rgba(0,0,0,.075)); /* Global box-shadow */
+  text-align: center; /* Ensure text is centered */
+  line-height: var(--line-height-base, 1.5); /* Use global line height */
+}
+
+.hello-button:hover {
+  background-color: var(--primary-color-dark, #0056b3); /* Darker background on hover */
+  border-color: var(--primary-color-dark, #0056b3);
+  transform: translateY(-1px); /* Slight lift effect */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); /* More pronounced shadow on hover */
+}
+
+.hello-button:focus {
+  border-color: var(--primary-color-dark, #0056b3); /* Maintain darker border on focus */
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25); /* Custom focus ring using primary color with transparency */
+}
+
+.hello-button:active {
+  background-color: var(--primary-color-dark, #0056b3); /* Darker background on active */
+  border-color: var(--primary-color-dark, #0056b3);
+  transform: translateY(0); /* Reset lift on click for a "pressed" effect */
+  box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125); /* Inset shadow for a pressed look */
+}
+
+.hello-button:disabled {
+  background-color: var(--bg-light-hover, #e9ecef); /* Lighter background for disabled state */
+  color: var(--text-muted, #6c757d); /* Muted text color for disabled state */
+  border-color: var(--border-color, #ced4da); /* Lighter border color */
+  cursor: not-allowed; /* Indicate that the button is not interactable */
+  transform: none; /* Remove any transform effects */
+  box-shadow: none; /* Remove shadow */
+  opacity: 0.6; /* Reduce opacity to clearly show disabled state */
+}
+
+/* Optional: Add a margin if HelloButton is expected to sit next to other elements often */
+/* However, typically parent components manage spacing between children. */
+/* If a specific layout requires it, a wrapper or utility class would be preferred. */
+/* .hello-button + .hello-button {
+  margin-left: var(--spacing-sm, 8px);
+} */
