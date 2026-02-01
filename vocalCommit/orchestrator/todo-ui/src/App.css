@@ -857,42 +857,6 @@ body {
   transform: translateY(-1px);
 }
 
-/* Hello Button Styles */
-.hello-button {
-  background-color: var(--color-primary-accent);
-  color: var(--text-light);
-  border: 1px solid var(--color-primary-accent);
-  padding: 10px 20px; /* Consistent with other action buttons */
-  border-radius: 8px; /* Consistent with other action buttons */
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  display: inline-flex; /* Use flex for potential icon/text centering */
-  align-items: center;
-  justify-content: center;
-  gap: 8px; /* Space between text and icon if any */
-}
-
-.hello-button:hover:not(:disabled) {
-  background-color: var(--add-btn-hover-bg); /* Use existing hover color for primary buttons */
-  border-color: var(--add-btn-hover-bg);
-  transform: translateY(-1px); /* Slight lift effect */
-  box-shadow: var(--shadow-btn-hover-primary); /* Use a primary button shadow */
-}
-
-.hello-button:active {
-  transform: translateY(0); /* Press down effect */
-  box-shadow: none;
-}
-
-.hello-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
 /* Responsive Styles */
 @media (max-width: 768px) {
   .controls {
