@@ -18,6 +18,7 @@ from utils.thought_signatures import thought_manager
 from utils.theme_system_patterns import get_theme_system_knowledge
 from tools.ui_file_watcher import create_ui_watcher
 from tools.git_ops import git_ops
+from tools.github_ops import github_ops
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -194,20 +195,47 @@ async def get_admin_workflows():
             commit_info = task.get("commit_info", {})
             has_commit = bool(commit_info.get("commit_hash"))
             
+            # Determine available actions based on GitHub status
+            actions = []
+            if task.get("pending_github_push") and task.get("github_ready"):
+                actions.append("approve_github_push")
+            
+            if has_commit and not task.get("github_pushed"):
+                actions.extend(["approve_commit", "rollback_soft", "rollback_hard"])
+            elif task.get("github_pushed"):
+                actions.append("revert_github_push")
+            
+            # Determine status based on GitHub workflow
+            if task.get("github_pushed"):
+                status = "pushed_to_production"
+                description = f"Pushed to production - {len(task.get('modified_files', []))} files live"
+            elif task.get("pending_github_push"):
+                status = "awaiting_github_approval"
+                description = f"Ready for production - awaiting GitHub push approval"
+            else:
+                status = "completed_awaiting_approval"
+                description = f"Completed - {len(task.get('modified_files', []))} files modified"
+            
             workflows.append({
                 "id": task_id,
                 "title": task["title"],
-                "description": f"Completed - {len(task.get('modified_files', []))} files modified",
-                "status": "completed_awaiting_approval",
+                "description": description,
+                "status": status,
                 "priority": task.get("priority", "medium"),
                 "createdAt": task.get("createdAt", "2024-01-23T10:00:00Z"),
                 "updatedAt": task.get("updatedAt", "2024-01-23T10:00:00Z"),
                 "workflow_type": "completed",
                 "commit_info": commit_info,
+                "github_commit_info": task.get("github_commit_info"),
                 "has_commit": has_commit,
-                "can_rollback": has_commit,
+                "github_ready": task.get("github_ready", False),
+                "github_pushed": task.get("github_pushed", False),
+                "pending_github_push": task.get("pending_github_push", False),
+                "gemini_analysis": task.get("gemini_analysis"),
+                "can_rollback": has_commit and not task.get("github_pushed"),
+                "can_revert_github": task.get("github_pushed", False),
                 "modified_files": task.get("modified_files", []),
-                "actions": ["approve_commit", "rollback_soft", "rollback_hard"] if has_commit else []
+                "actions": actions
             })
     
     return {"workflows": workflows}
@@ -712,8 +740,37 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "type": "ui_editing"
         }
         
-        # Commit changes to git
-        logger.info(f"Committing changes for task {task_id}")
+        # Production workflow: Sync repo, get AI suggestions, and push to GitHub
+        logger.info(f"Starting production workflow for task {task_id}")
+        
+        # Step 1: Sync the todo-ui repository
+        sync_result = github_ops.clone_or_pull_repo()
+        if sync_result["status"] != "success":
+            logger.error(f"Failed to sync todo-ui repo: {sync_result.get('error', 'Unknown error')}")
+            task_data["github_sync_error"] = sync_result.get("error", "Unknown error")
+        else:
+            logger.info(f"Successfully synced todo-ui repo: {sync_result['action']}")
+        
+        # Step 2: Get Gemini AI suggestions for the changes
+        gemini_suggestions = github_ops.get_gemini_suggestions(
+            approval_data["transcript"], 
+            modified_files
+        )
+        
+        if gemini_suggestions["status"] == "success":
+            logger.info(f"Gemini AI analysis completed with {gemini_suggestions['suggestions']['confidence']:.2f} confidence")
+            task_data["gemini_analysis"] = gemini_suggestions["suggestions"]
+        else:
+            logger.warning(f"Gemini AI analysis failed: {gemini_suggestions.get('error', 'Unknown error')}")
+            task_data["gemini_analysis"] = gemini_suggestions.get("suggestions", {})
+        
+        # Step 3: Commit and push changes to GitHub (requires approval)
+        # Store the data for approval workflow
+        task_data["pending_github_push"] = True
+        task_data["github_ready"] = sync_result["status"] == "success"
+        
+        # Commit changes to local git (original behavior)
+        logger.info(f"Committing changes locally for task {task_id}")
         commit_result = git_ops.commit_changes(
             message=approval_data["transcript"],
             task_id=task_id,
@@ -754,10 +811,21 @@ async def process_task_in_background(task_id: str, approval_data: dict):
         
         # Send completion notification via WebSocket to connected clients
         commit_info_msg = ""
+        github_info_msg = ""
+        
         if task_data.get("commit_info", {}).get("commit_hash"):
-            commit_info_msg = f"\n🔗 **Commit**: {task_data['commit_info']['commit_hash']}"
+            commit_info_msg = f"\n🔗 **Local Commit**: {task_data['commit_info']['commit_hash']}"
         elif task_data.get("commit_info", {}).get("status") == "failed":
             commit_info_msg = f"\n⚠️ **Commit Failed**: {task_data['commit_info']['error']}"
+        
+        if task_data.get("github_ready"):
+            github_info_msg = f"\n🚀 **GitHub Ready**: Awaiting approval to push to production"
+            if task_data.get("gemini_analysis", {}).get("risk_assessment"):
+                risk = task_data["gemini_analysis"]["risk_assessment"]
+                confidence = task_data["gemini_analysis"].get("confidence", 0.0)
+                github_info_msg += f"\n🤖 **AI Analysis**: {risk.title()} risk ({confidence:.0%} confidence)"
+        else:
+            github_info_msg = f"\n⚠️ **GitHub Sync Failed**: {task_data.get('github_sync_error', 'Unknown error')}"
         
         completion_message = {
             "type": "task_completed",
@@ -768,7 +836,10 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "ui_changes": dev_result.get("ui_changes", []),
             "test_results": test_result,
             "commit_info": task_data.get("commit_info"),
-            "message": f"🎉 **Task Completed!**\n\n**{approval_data['transcript']}**\n\n📁 Modified {len(modified_files)} files\n🌐 View changes at http://localhost:5174{commit_info_msg}"
+            "gemini_analysis": task_data.get("gemini_analysis"),
+            "github_ready": task_data.get("github_ready", False),
+            "pending_github_push": task_data.get("pending_github_push", False),
+            "message": f"🎉 **Task Completed!**\n\n**{approval_data['transcript']}**\n\n📁 Modified {len(modified_files)} files\n🌐 View changes at http://localhost:5174{commit_info_msg}{github_info_msg}"
         }
         
         # Broadcast to all connected WebSocket clients
@@ -1023,6 +1094,73 @@ async def clear_all_suspended_workflows():
         "cleared_count": count
     }
 
+@app.get("/github-status")
+async def get_github_status():
+    """Get GitHub repository status and sync state."""
+    try:
+        # Check if local repo exists and get status
+        local_status = github_ops.get_last_commit_info()
+        
+        # Try to pull latest changes to check sync status
+        sync_result = github_ops.clone_or_pull_repo()
+        
+        return {
+            "status": "success",
+            "local_repo_exists": local_status["status"] == "success",
+            "last_commit": local_status if local_status["status"] == "success" else None,
+            "sync_status": sync_result,
+            "repo_url": github_ops.repo_url,
+            "local_path": str(github_ops.local_path)
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.post("/sync-todo-ui")
+async def sync_todo_ui_repo():
+    """Sync the todo-ui repository (clone or pull latest changes)."""
+    try:
+        result = github_ops.clone_or_pull_repo()
+        return result
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.post("/revert-last-push")
+async def revert_last_push():
+    """Revert the last commit in the todo-ui repository."""
+    try:
+        result = github_ops.revert_last_commit()
+        
+        if result["status"] == "success":
+            # Send revert notification via WebSocket
+            revert_message = {
+                "type": "commit_reverted",
+                "status": "reverted",
+                "reverted_commit": result["reverted_commit"],
+                "commit_message": result["commit_message"],
+                "changed_files": result["changed_files"],
+                "message": f"🔄 **Commit Reverted**\n\n**Reverted**: {result['reverted_commit']}\n\n**Original**: {result['commit_message']}\n\n📁 **Files**: {len(result['changed_files'])} files affected"
+            }
+            
+            # Broadcast to all connected WebSocket clients
+            for connection in manager.active_connections:
+                try:
+                    await connection.send_text(json.dumps(revert_message))
+                except Exception as e:
+                    logger.warning(f"Failed to send revert notification to WebSocket client: {e}")
+        
+        return result
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 @app.get("/git-status")
 async def get_git_status():
     """Get current git repository status."""
@@ -1145,6 +1283,95 @@ async def rollback_task_commit(task_id: str, hard_rollback: bool = False):
         
     except Exception as e:
         logger.error(f"Error rolling back task {task_id}: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+@app.post("/approve-github-push/{task_id}")
+async def approve_github_push(task_id: str):
+    """
+    Approve pushing changes to GitHub production repository.
+    
+    Args:
+        task_id: Task identifier
+    """
+    try:
+        # Check if task exists and is ready for GitHub push
+        if task_id not in completed_tasks:
+            return {
+                "status": "error",
+                "error": f"Task {task_id} not found in completed tasks"
+            }
+        
+        task = completed_tasks[task_id]
+        
+        if not task.get("pending_github_push"):
+            return {
+                "status": "error",
+                "error": f"Task {task_id} is not pending GitHub push approval"
+            }
+        
+        if not task.get("github_ready"):
+            return {
+                "status": "error",
+                "error": f"Task {task_id} is not ready for GitHub push (sync failed)"
+            }
+        
+        # Perform GitHub push
+        push_result = github_ops.commit_and_push_changes(
+            task["title"],
+            task["modified_files"],
+            {"suggestions": task.get("gemini_analysis", {})}
+        )
+        
+        if push_result["status"] != "success":
+            return {
+                "status": "error",
+                "error": f"Failed to push to GitHub: {push_result.get('error', 'Unknown error')}",
+                "push_result": push_result
+            }
+        
+        # Update task status
+        task["pending_github_push"] = False
+        task["github_pushed"] = True
+        task["github_commit_info"] = {
+            "commit_hash": push_result["commit_hash"],
+            "commit_message": push_result["commit_message"],
+            "timestamp": push_result["timestamp"],
+            "pushed_at": "2024-01-23T" + str(len(completed_tasks) + 40).zfill(2) + ":00:00Z"
+        }
+        
+        logger.info(f"Task {task_id} successfully pushed to GitHub: {push_result['commit_hash']}")
+        
+        # Send GitHub push notification via WebSocket
+        push_message = {
+            "type": "github_pushed",
+            "task_id": task_id,
+            "status": "pushed",
+            "transcript": task["title"],
+            "commit_hash": push_result["commit_hash"],
+            "gemini_analysis": task.get("gemini_analysis"),
+            "message": f"🚀 **Pushed to Production!**\n\n**{task['title']}**\n\n🔗 **GitHub Commit**: {push_result['commit_hash']}\n📁 **Files**: {len(task['modified_files'])} files pushed\n\n✅ **Status**: Live in production repository"
+        }
+        
+        # Broadcast to all connected WebSocket clients
+        for connection in manager.active_connections:
+            try:
+                await connection.send_text(json.dumps(push_message))
+            except Exception as e:
+                logger.warning(f"Failed to send GitHub push notification to WebSocket client: {e}")
+        
+        return {
+            "status": "success",
+            "task_id": task_id,
+            "commit_hash": push_result["commit_hash"],
+            "message": f"Task {task_id} successfully pushed to GitHub production repository",
+            "github_commit_info": task["github_commit_info"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error approving GitHub push for task {task_id}: {str(e)}")
         return {
             "status": "error",
             "error": str(e)

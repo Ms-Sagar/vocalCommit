@@ -2,8 +2,23 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
+
+def get_todo_ui_path() -> Path:
+    """Get the path to the todo-ui directory (production or local)."""
+    # Check if production todo-ui exists (separate repo)
+    production_path = Path(settings.todo_ui_local_path).resolve()
+    if production_path.exists() and (production_path / ".git").exists():
+        logger.info(f"Using production todo-ui at: {production_path}")
+        return production_path
+    
+    # Fall back to local todo-ui inside orchestrator
+    orchestrator_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_path = Path(orchestrator_dir) / "todo-ui"
+    logger.info(f"Using local todo-ui at: {local_path}")
+    return local_path
 
 def write_to_todo_ui(file_path: str, content: str) -> Dict[str, Any]:
     """
@@ -17,13 +32,10 @@ def write_to_todo_ui(file_path: str, content: str) -> Dict[str, Any]:
         Dict containing operation status and details
     """
     try:
-        # Get the orchestrator directory (where this script is running from)
-        orchestrator_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # todo-ui is now inside orchestrator
-        todo_ui_base = os.path.join(orchestrator_dir, "todo-ui")
+        # Get the todo-ui directory (production or local)
+        todo_ui_path = get_todo_ui_path()
         
         # Resolve and validate the target path
-        todo_ui_path = Path(todo_ui_base).resolve()
         target_path = (todo_ui_path / file_path).resolve()
         
         # Security check: ensure target is within todo-ui directory
@@ -42,7 +54,8 @@ def write_to_todo_ui(file_path: str, content: str) -> Dict[str, Any]:
         return {
             "status": "success",
             "file_path": str(target_path),
-            "size_bytes": len(content.encode('utf-8'))
+            "size_bytes": len(content.encode('utf-8')),
+            "is_production": str(todo_ui_path) == str(Path(settings.todo_ui_local_path).resolve())
         }
         
     except Exception as e:
@@ -64,12 +77,9 @@ def read_from_todo_ui(file_path: str) -> Dict[str, Any]:
         Dict containing file content and metadata
     """
     try:
-        # Get the orchestrator directory (where this script is running from)
-        orchestrator_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # todo-ui is now inside orchestrator
-        todo_ui_base = os.path.join(orchestrator_dir, "todo-ui")
+        # Get the todo-ui directory (production or local)
+        todo_ui_path = get_todo_ui_path()
         
-        todo_ui_path = Path(todo_ui_base).resolve()
         target_path = (todo_ui_path / file_path).resolve()
         
         # Security check
@@ -86,7 +96,8 @@ def read_from_todo_ui(file_path: str) -> Dict[str, Any]:
             "status": "success",
             "content": content,
             "file_path": str(target_path),
-            "size_bytes": len(content.encode('utf-8'))
+            "size_bytes": len(content.encode('utf-8')),
+            "is_production": str(todo_ui_path) == str(Path(settings.todo_ui_local_path).resolve())
         }
         
     except Exception as e:

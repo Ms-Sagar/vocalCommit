@@ -99,28 +99,39 @@ class UIFileWatcher:
         }
 
 def create_ui_watcher(todo_ui_path: str = "todo-ui/src") -> UIFileWatcher:
-    """Create a UI file watcher for the todo-ui directory (now inside orchestrator)."""
-    # Get the orchestrator directory (where this script is running from)
-    orchestrator_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    """Create a UI file watcher for the todo-ui directory (production or local)."""
+    from ..core.config import settings
+    from pathlib import Path
     
-    # Build absolute paths - todo-ui is now inside orchestrator
-    base_todo_path = os.path.join(orchestrator_dir, "todo-ui", "src")
+    # Check if production todo-ui exists (separate repo)
+    production_path = Path(settings.todo_ui_local_path).resolve()
+    if production_path.exists() and (production_path / ".git").exists():
+        logger.info(f"Watching production todo-ui at: {production_path}")
+        base_todo_path = production_path / "src"
+        todo_ui_root = production_path
+    else:
+        # Fall back to local todo-ui inside orchestrator
+        orchestrator_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        todo_ui_root = Path(orchestrator_dir) / "todo-ui"
+        base_todo_path = todo_ui_root / "src"
+        logger.info(f"Watching local todo-ui at: {todo_ui_root}")
+    
     watch_paths = []
     
     # Only add paths that actually exist
-    if os.path.exists(base_todo_path):
-        watch_paths.append(base_todo_path)
+    if base_todo_path.exists():
+        watch_paths.append(str(base_todo_path))
     
     # Add additional paths if they exist
     additional_paths = [
-        os.path.join(orchestrator_dir, "todo-ui", "src", "components"),
-        os.path.join(orchestrator_dir, "todo-ui", "src", "styles"),
-        os.path.join(orchestrator_dir, "todo-ui", "public")
+        todo_ui_root / "src" / "components",
+        todo_ui_root / "src" / "styles", 
+        todo_ui_root / "public"
     ]
     
     for path in additional_paths:
-        if os.path.exists(path):
-            watch_paths.append(path)
+        if path.exists():
+            watch_paths.append(str(path))
     
     return UIFileWatcher(watch_paths)
 
