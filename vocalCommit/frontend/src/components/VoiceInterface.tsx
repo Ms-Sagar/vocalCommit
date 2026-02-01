@@ -53,6 +53,22 @@ interface TaskWorkflow {
   current_step: number;
 }
 
+// Define API and WebSocket URLs from environment variables or defaults
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Helper to derive WS URL from API URL if WS_URL is not explicitly provided
+const getWsUrl = () => {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  // Remove trailing slash if present
+  const cleanBase = API_BASE_URL.replace(/\/$/, '');
+  // Switch protocol: http -> ws, https -> wss
+  const wsProtocol = cleanBase.startsWith('https') ? 'wss' : 'ws';
+  const wsBase = cleanBase.replace(/^https?/, wsProtocol);
+  return `${wsBase}/ws`;
+};
+
+const WS_URL = getWsUrl();
+
 const VoiceInterface: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -61,10 +77,10 @@ const VoiceInterface: React.FC = () => {
   const [activeWorkflows, setActiveWorkflows] = useState<TaskWorkflow[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
-  const [approvalFeedback, setApprovalFeedback] = useState<{[key: string]: string}>({});
-  const [processingApprovals, setProcessingApprovals] = useState<{[key: string]: boolean}>({});
-  const [generatingFiles, setGeneratingFiles] = useState<{[key: string]: boolean}>({});
-  const [filesGenerated, setFilesGenerated] = useState<{[key: string]: boolean}>({});
+  const [approvalFeedback, setApprovalFeedback] = useState<{ [key: string]: string }>({});
+  const [processingApprovals, setProcessingApprovals] = useState<{ [key: string]: boolean }>({});
+  const [generatingFiles, setGeneratingFiles] = useState<{ [key: string]: boolean }>({});
+  const [filesGenerated, setFilesGenerated] = useState<{ [key: string]: boolean }>({});
   const [editingWorkflow, setEditingWorkflow] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     transcript: '',
@@ -73,7 +89,7 @@ const VoiceInterface: React.FC = () => {
     estimated_effort: '',
     breakdown: [] as string[]
   });
-  
+
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -82,7 +98,7 @@ const VoiceInterface: React.FC = () => {
     const stepMap: { [key: string]: string } = {
       'pm_completed': 'PM Analysis Complete',
       'pm_analysis': 'PM Analysis',
-      'dev_completed': 'Development Complete', 
+      'dev_completed': 'Development Complete',
       'dev_analysis': 'Development Analysis',
       'dev_implementation': 'Development Implementation',
       'security_completed': 'Security Review Complete',
@@ -93,7 +109,7 @@ const VoiceInterface: React.FC = () => {
       'testing': 'Testing Phase',
       'deployment': 'Deployment Phase'
     };
-    
+
     return stepMap[step] || step.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
@@ -109,35 +125,35 @@ const VoiceInterface: React.FC = () => {
       'manual_review': 'Manual Review',
       'final_review': 'Final Review'
     };
-    
+
     return agentMap[nextStep] || nextStep.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
   useEffect(() => {
     // Initialize WebSocket connection
     const connectWebSocket = () => {
-      const ws = new WebSocket('ws://localhost:8000/ws');
-      
+      const ws = new WebSocket(WS_URL);
+
       ws.onopen = () => {
         setIsConnected(true);
         setConnectionStatus('Connected to VocalCommit Orchestrator');
         console.log('Connected to VocalCommit WebSocket');
         fetchPendingApprovals();
       };
-      
+
       ws.onmessage = (event) => {
         try {
           const response: AgentResponse = JSON.parse(event.data);
           setMessages(prev => [...prev, response]);
-          
+
           // Update workflow tracking
           updateWorkflowStatus(response);
-          
+
           // If this is a pending approval, refresh the approvals list
           if (response.requires_approval) {
             fetchPendingApprovals();
           }
-          
+
           // Clear approval feedback after successful operations
           if (response.status === 'completed' || response.status === 'rejected') {
             setApprovalFeedback(prev => {
@@ -150,7 +166,7 @@ const VoiceInterface: React.FC = () => {
           console.error('Error parsing WebSocket message:', error);
         }
       };
-      
+
       ws.onclose = () => {
         setIsConnected(false);
         setConnectionStatus('Disconnected - Attempting to reconnect...');
@@ -158,12 +174,12 @@ const VoiceInterface: React.FC = () => {
         // Attempt to reconnect after 3 seconds
         setTimeout(connectWebSocket, 3000);
       };
-      
+
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
         setConnectionStatus('Connection Error');
       };
-      
+
       wsRef.current = ws;
     };
 
@@ -173,20 +189,20 @@ const VoiceInterface: React.FC = () => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
-      
+
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = 'en-US';
-      
+
       recognition.onstart = () => {
         setIsListening(true);
         setTranscript('Listening...');
       };
-      
+
       recognition.onresult = (event) => {
         const result = event.results[0][0].transcript;
         setTranscript(result);
-        
+
         // Send to VocalCommit orchestrator
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           const message: VoiceMessage = {
@@ -194,21 +210,21 @@ const VoiceInterface: React.FC = () => {
             transcript: result,
             timestamp: new Date().toISOString()
           };
-          
+
           wsRef.current.send(JSON.stringify(message));
         }
       };
-      
+
       recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
         setTranscript(`Error: ${event.error}`);
       };
-      
+
       recognition.onend = () => {
         setIsListening(false);
       };
-      
+
       recognitionRef.current = recognition;
     }
 
@@ -221,7 +237,7 @@ const VoiceInterface: React.FC = () => {
 
   const fetchPendingApprovals = async () => {
     try {
-      const response = await fetch('http://localhost:8000/pending-approvals');
+      const response = await fetch(`${API_BASE_URL}/pending-approvals`);
       const data = await response.json();
       setPendingApprovals(data.pending_approvals || []);
     } catch (error) {
@@ -234,7 +250,7 @@ const VoiceInterface: React.FC = () => {
 
     setActiveWorkflows(prev => {
       const existing = prev.find(w => w.task_id === response.task_id);
-      
+
       if (!existing) {
         // Create new workflow with dynamic steps based on response
         const newWorkflow: TaskWorkflow = {
@@ -264,7 +280,7 @@ const VoiceInterface: React.FC = () => {
           if (workflow.task_id !== response.task_id) return workflow;
 
           const updated = { ...workflow };
-          
+
           if (response.status === 'pending_approval') {
             // Handle different types of approvals
             if (response.agent === 'PM Agent') {
@@ -283,7 +299,7 @@ const VoiceInterface: React.FC = () => {
                 step.status = index === updated.current_step ? 'approved' : 'completed';
               }
             });
-            
+
             // If we have test results, mark testing step as completed
             if (response.test_results) {
               const testingStepIndex = updated.steps.findIndex(s => s.id === 'testing');
@@ -291,7 +307,7 @@ const VoiceInterface: React.FC = () => {
                 updated.steps[testingStepIndex].status = 'completed';
               }
             }
-            
+
             updated.steps[updated.steps.length - 1].status = 'completed';
             updated.current_step = updated.steps.length - 1;
           } else if (response.status === 'rejected') {
@@ -331,7 +347,7 @@ const VoiceInterface: React.FC = () => {
         transcript: transcript.trim(),
         timestamp: new Date().toISOString()
       };
-      
+
       wsRef.current.send(JSON.stringify(message));
       setTranscript('');
     }
@@ -361,13 +377,13 @@ const VoiceInterface: React.FC = () => {
         transcript: `${action}_${taskId}`,
         timestamp: new Date().toISOString()
       };
-      
+
       wsRef.current.send(JSON.stringify(message));
-      
+
       // Update workflow status immediately for visual feedback
       setActiveWorkflows(prev => prev.map(workflow => {
         if (workflow.task_id !== taskId) return workflow;
-        
+
         const updated = { ...workflow };
         if (action === 'approve') {
           // Find current step and advance it
@@ -383,20 +399,20 @@ const VoiceInterface: React.FC = () => {
         }
         return updated;
       }));
-      
+
       // Set a longer timeout for better user experience
       setTimeout(() => {
         // Update feedback based on action
         setApprovalFeedback(prev => ({
           ...prev,
-          [taskId]: action === 'approve' 
-            ? '✅ Approved! Processing with next agent...' 
+          [taskId]: action === 'approve'
+            ? '✅ Approved! Processing with next agent...'
             : '❌ Task rejected and suspended'
         }));
-        
+
         // Refresh approvals to get updated state
         fetchPendingApprovals();
-        
+
         // Clear processing and feedback after longer delay
         setTimeout(() => {
           setProcessingApprovals(prev => {
@@ -404,7 +420,7 @@ const VoiceInterface: React.FC = () => {
             delete updated[taskId];
             return updated;
           });
-          
+
           setApprovalFeedback(prev => {
             const updated = { ...prev };
             delete updated[taskId];
@@ -436,23 +452,23 @@ const VoiceInterface: React.FC = () => {
         transcript: `Generate files for ${taskId}`
       }]);
 
-      const response = await fetch(`http://localhost:8000/generate-files/${taskId}`, {
+      const response = await fetch(`${API_BASE_URL}/generate-files/${taskId}`, {
         method: 'POST'
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
+
       const result = await response.json();
-      
+
       if (result.status === 'success') {
         // Mark files as generated for this task
         setFilesGenerated(prev => ({
           ...prev,
           [taskId]: true
         }));
-        
+
         setMessages(prev => [...prev, {
           status: 'success',
           agent: 'File Generator',
@@ -487,9 +503,9 @@ const VoiceInterface: React.FC = () => {
 
   const startEditingWorkflow = async (taskId: string) => {
     try {
-      const response = await fetch(`http://localhost:8000/tasks/${taskId}`);
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`);
       const workflow = await response.json();
-      
+
       if (workflow.plan) {
         setEditForm({
           transcript: workflow.title || '',
@@ -509,7 +525,7 @@ const VoiceInterface: React.FC = () => {
     if (!editingWorkflow) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/admin-workflows/${editingWorkflow}`, {
+      const response = await fetch(`${API_BASE_URL}/admin-workflows/${editingWorkflow}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -526,7 +542,7 @@ const VoiceInterface: React.FC = () => {
       });
 
       const result = await response.json();
-      
+
       if (result.status === 'success') {
         setMessages(prev => [...prev, {
           status: 'success',
@@ -534,10 +550,10 @@ const VoiceInterface: React.FC = () => {
           response: `✅ **Workflow Updated Successfully!**\n\nTask "${editForm.transcript}" has been updated with your changes.`,
           transcript: editForm.transcript
         }]);
-        
+
         // Refresh pending approvals
         fetchPendingApprovals();
-        
+
         // Close edit modal
         setEditingWorkflow(null);
       } else {
@@ -600,12 +616,12 @@ const VoiceInterface: React.FC = () => {
                   <h4>{workflow.transcript}</h4>
                   <span className="task-id">ID: {workflow.task_id}</span>
                 </div>
-                
+
                 <div className="workflow-progress">
                   <div className="progress-steps">
                     {workflow.steps.map((step, index) => (
-                      <div 
-                        key={step.id} 
+                      <div
+                        key={step.id}
                         className={`progress-step ${step.status} ${index === workflow.current_step ? 'current' : ''}`}
                       >
                         <div className="step-indicator">
@@ -622,10 +638,10 @@ const VoiceInterface: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                  
+
                   <div className="progress-bar">
-                    <div 
-                      className="progress-fill" 
+                    <div
+                      className="progress-fill"
                       style={{ width: `${(workflow.current_step / (workflow.steps.length - 1)) * 100}%` }}
                     ></div>
                   </div>
@@ -662,20 +678,20 @@ const VoiceInterface: React.FC = () => {
                   <p><strong>Status:</strong> Waiting for manual approval to proceed</p>
                 </div>
                 <div className="approval-actions">
-                  <button 
+                  <button
                     className="edit-btn"
                     onClick={() => startEditingWorkflow(approval.task_id)}
                   >
                     ✏️ Edit
                   </button>
-                  <button 
+                  <button
                     className="approve-btn"
                     onClick={() => handleApproval(approval.task_id, 'approve')}
                     disabled={processingApprovals[approval.task_id] || !!approvalFeedback[approval.task_id]}
                   >
                     {processingApprovals[approval.task_id] ? '🔄 Processing...' : '✅ Approve'}
                   </button>
-                  <button 
+                  <button
                     className="reject-btn"
                     onClick={() => handleApproval(approval.task_id, 'reject')}
                     disabled={processingApprovals[approval.task_id] || !!approvalFeedback[approval.task_id]}
@@ -683,7 +699,7 @@ const VoiceInterface: React.FC = () => {
                     {processingApprovals[approval.task_id] ? '🔄 Processing...' : '❌ Reject'}
                   </button>
                 </div>
-                
+
                 {approvalFeedback[approval.task_id] && (
                   <div className="approval-feedback">
                     {approvalFeedback[approval.task_id]}
@@ -701,18 +717,18 @@ const VoiceInterface: React.FC = () => {
           <div className="transcript-display">
             {transcript || 'Click "Start Listening" to begin voice commands...'}
           </div>
-          
+
           <div className="control-buttons">
-            <button 
-              onClick={startListening} 
+            <button
+              onClick={startListening}
               disabled={isListening || !isConnected}
               className={`voice-btn ${isListening ? 'listening' : ''}`}
             >
               {isListening ? '🎤 Listening...' : '🎤 Start Listening'}
             </button>
-            
-            <button 
-              onClick={stopListening} 
+
+            <button
+              onClick={stopListening}
               disabled={!isListening}
               className="voice-btn stop"
             >
@@ -732,7 +748,7 @@ const VoiceInterface: React.FC = () => {
               className="text-input"
               onKeyPress={(e) => e.key === 'Enter' && sendTextCommand()}
             />
-            <button 
+            <button
               onClick={sendTextCommand}
               disabled={!isConnected || !transcript.trim()}
               className="send-btn"
@@ -763,7 +779,7 @@ const VoiceInterface: React.FC = () => {
                 <div className="message-content">
                   {message.response}
                 </div>
-                
+
                 {/* Testing Results Display */}
                 {message.test_results && (
                   <div className="testing-results">
@@ -776,7 +792,7 @@ const VoiceInterface: React.FC = () => {
                         {message.test_results.overall_assessment}
                       </div>
                     </div>
-                    
+
                     {message.test_results.tests_run && message.test_results.tests_run.length > 0 && (
                       <div className="tests-executed">
                         <strong>Tests Executed:</strong>
@@ -792,7 +808,7 @@ const VoiceInterface: React.FC = () => {
                         </div>
                       </div>
                     )}
-                    
+
                     {/* Detailed Test Results */}
                     <div className="detailed-test-results">
                       {message.test_results.syntax_validation && (
@@ -808,7 +824,7 @@ const VoiceInterface: React.FC = () => {
                           )}
                         </div>
                       )}
-                      
+
                       {message.test_results.build_test && (
                         <div className="test-detail">
                           <strong>🔨 Build Test:</strong>
@@ -822,7 +838,7 @@ const VoiceInterface: React.FC = () => {
                           )}
                         </div>
                       )}
-                      
+
                       {message.test_results.functional_validation && (
                         <div className="test-detail">
                           <strong>⚙️ Functional Validation:</strong>
@@ -835,7 +851,7 @@ const VoiceInterface: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    
+
                     {message.test_results.recommendations && message.test_results.recommendations.length > 0 && (
                       <div className="test-recommendations">
                         <strong>💡 Recommendations:</strong>
@@ -848,7 +864,7 @@ const VoiceInterface: React.FC = () => {
                     )}
                   </div>
                 )}
-                
+
                 {/* Modified Files Display */}
                 {message.modified_files && message.modified_files.length > 0 && (
                   <div className="modified-files">
@@ -871,7 +887,7 @@ const VoiceInterface: React.FC = () => {
                       Task ID: {message.task_id}
                     </div>
                     {message.status === 'completed' && !filesGenerated[message.task_id!] && (
-                      <button 
+                      <button
                         className="generate-files-btn"
                         onClick={() => generateFilesForTask(message.task_id!)}
                         disabled={generatingFiles[message.task_id!]}
@@ -950,59 +966,59 @@ const VoiceInterface: React.FC = () => {
           <div className="modal edit-workflow-modal">
             <div className="modal-header">
               <h3>✏️ Edit Workflow</h3>
-              <button 
+              <button
                 className="close-btn"
                 onClick={cancelWorkflowEdit}
               >
                 ✕
               </button>
             </div>
-            
+
             <div className="modal-body">
               <div className="form-group">
                 <label>Task Description *</label>
                 <input
                   type="text"
                   value={editForm.transcript}
-                  onChange={(e) => setEditForm({...editForm, transcript: e.target.value})}
+                  onChange={(e) => setEditForm({ ...editForm, transcript: e.target.value })}
                   placeholder="Enter task description..."
                 />
               </div>
-              
+
               <div className="form-group">
                 <label>Detailed Description</label>
                 <textarea
                   value={editForm.description}
-                  onChange={(e) => setEditForm({...editForm, description: e.target.value})}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                   placeholder="Enter detailed description..."
                   rows={3}
                 />
               </div>
-              
+
               <div className="form-row">
                 <div className="form-group">
                   <label>Priority</label>
                   <select
                     value={editForm.priority}
-                    onChange={(e) => setEditForm({...editForm, priority: e.target.value})}
+                    onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
                   </select>
                 </div>
-                
+
                 <div className="form-group">
                   <label>Estimated Effort</label>
                   <input
                     type="text"
                     value={editForm.estimated_effort}
-                    onChange={(e) => setEditForm({...editForm, estimated_effort: e.target.value})}
+                    onChange={(e) => setEditForm({ ...editForm, estimated_effort: e.target.value })}
                     placeholder="e.g., 2-4 hours, 1-2 days"
                   />
                 </div>
               </div>
-              
+
               <div className="form-group">
                 <label>Implementation Steps</label>
                 <div className="breakdown-list">
@@ -1014,7 +1030,7 @@ const VoiceInterface: React.FC = () => {
                         onChange={(e) => updateBreakdownStep(index, e.target.value)}
                         placeholder={`Step ${index + 1}...`}
                       />
-                      <button 
+                      <button
                         className="remove-step-btn"
                         onClick={() => removeBreakdownStep(index)}
                       >
@@ -1022,7 +1038,7 @@ const VoiceInterface: React.FC = () => {
                       </button>
                     </div>
                   ))}
-                  <button 
+                  <button
                     className="add-step-btn"
                     onClick={addBreakdownStep}
                   >
@@ -1031,15 +1047,15 @@ const VoiceInterface: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="modal-footer">
-              <button 
+              <button
                 className="cancel-btn"
                 onClick={cancelWorkflowEdit}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 className="save-btn"
                 onClick={saveWorkflowEdit}
                 disabled={!editForm.transcript.trim()}

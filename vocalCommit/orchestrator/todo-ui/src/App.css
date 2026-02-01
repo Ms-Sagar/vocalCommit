@@ -89,6 +89,7 @@
   --shadow-card-hover: 0 4px 20px rgba(0,0,0,0.15);
   --shadow-modal: 0 10px 30px rgba(0,0,0,0.3);
   --shadow-btn-hover-success: 0 4px 12px rgba(40, 167, 69, 0.3);
+  --shadow-btn-hover-primary: 0 4px 10px rgba(0, 123, 255, 0.2); /* Added for primary button hover */
 
   --status-pending-color: var(--color-secondary-accent);
   --status-completed-color: var(--color-success-accent);
@@ -840,6 +841,42 @@ body {
 .delete-btn:hover {
   background: var(--delete-btn-hover-bg);
   transform: translateY(-1px);
+}
+
+/* Hello Button Styles */
+.hello-button {
+  background-color: var(--color-primary-accent);
+  color: var(--text-light);
+  border: 1px solid var(--color-primary-accent);
+  padding: 10px 20px; /* Consistent with other action buttons */
+  border-radius: 8px; /* Consistent with other action buttons */
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  display: inline-flex; /* Use flex for potential icon/text centering */
+  align-items: center;
+  justify-content: center;
+  gap: 8px; /* Space between text and icon if any */
+}
+
+.hello-button:hover:not(:disabled) {
+  background-color: var(--add-btn-hover-bg); /* Use existing hover color for primary buttons */
+  border-color: var(--add-btn-hover-bg);
+  transform: translateY(-1px); /* Slight lift effect */
+  box-shadow: var(--shadow-btn-hover-primary); /* Use a primary button shadow */
+}
+
+.hello-button:active {
+  transform: translateY(0); /* Press down effect */
+  box-shadow: none;
+}
+
+.hello-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Responsive Styles */
