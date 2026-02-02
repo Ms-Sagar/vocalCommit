@@ -548,7 +548,13 @@ function App() {
             Completed
           </button>
         </div>
-        <button className="add-todo-btn" onClick={() => setIsModalOpen(true)} disabled={isAddingTodo} aria-label="Add new todo">
+        <button
+          className="add-todo-btn"
+          onClick={() => setIsModalOpen(true)}
+          disabled={isAddingTodo}
+          aria-label="Add new todo"
+          style={{ backgroundColor: 'purple' }} // Changed background color to purple
+        >
           <span aria-hidden="true">+</span> Add New Todo
         </button>
       </section>
