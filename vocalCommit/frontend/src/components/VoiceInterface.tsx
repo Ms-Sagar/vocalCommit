@@ -27,6 +27,18 @@ interface AgentResponse {
     status?: string;
     error?: string;
   };
+  github_pushed?: boolean;
+  github_commit_info?: {
+    commit_hash?: string;
+    commit_message?: string;
+    timestamp?: string;
+    pushed_at?: string;
+  };
+  github_push_error?: string;
+  type?: string; // For WebSocket message types like 'github_pushed', 'commit_dropped'
+  commit_hash?: string; // For WebSocket notifications
+  reverted_commit?: string; // For drop commit responses
+  changed_files?: string[]; // For drop commit responses
   test_results?: {
     status: string;
     tests_run: string[];
@@ -88,6 +100,8 @@ const VoiceInterface: React.FC = () => {
   const [commitActions, setCommitActions] = useState<{ [key: string]: boolean }>({});
   const [showCommitModal, setShowCommitModal] = useState(false);
   const [currentCommitTask, setCurrentCommitTask] = useState<{ taskId: string, task: AgentResponse } | null>(null);
+  const [isDroppingCommit, setIsDroppingCommit] = useState(false);
+  const [lastGithubPush, setLastGithubPush] = useState<{ taskId: string, commitHash: string, timestamp: string } | null>(null);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -155,14 +169,37 @@ const VoiceInterface: React.FC = () => {
               [response.task_id!]: response
             }));
 
-            // Show commit approval popup for successful commits
-            if (response.commit_info?.commit_hash) {
+            // Check if task was auto-pushed to GitHub
+            if (response.github_pushed && response.github_commit_info?.commit_hash) {
+              setLastGithubPush({
+                taskId: response.task_id,
+                commitHash: response.github_commit_info.commit_hash,
+                timestamp: response.github_commit_info.timestamp || new Date().toISOString()
+              });
+            }
+
+            // Show commit approval popup for successful commits (local commits only)
+            if (response.commit_info?.commit_hash && !response.github_pushed) {
               setCurrentCommitTask({
                 taskId: response.task_id,
                 task: response
               });
               setShowCommitModal(true);
             }
+          }
+
+          // Handle GitHub push notifications
+          if (response.type === 'github_pushed' && response.task_id) {
+            setLastGithubPush({
+              taskId: response.task_id,
+              commitHash: response.commit_hash || 'unknown',
+              timestamp: new Date().toISOString()
+            });
+          }
+
+          // Handle commit drop notifications
+          if (response.type === 'commit_dropped' || response.type === 'commit_reverted') {
+            setLastGithubPush(null); // Clear the last push info
           }
 
           // Handle commit approval/rollback notifications
@@ -550,6 +587,53 @@ const VoiceInterface: React.FC = () => {
     }
   };
 
+  const dropLatestCommit = async () => {
+    if (isDroppingCommit) return;
+
+    try {
+      setIsDroppingCommit(true);
+
+      const response = await fetch(`${API_BASE_URL}/drop-latest-commit`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        setMessages(prev => [...prev, {
+          status: 'success',
+          agent: 'GitHub System',
+          response: `🗑️ **Latest Commit Dropped**\n\nSuccessfully reverted commit ${result.reverted_commit} from TODO-UI production.\n\n**Original Task**: ${result.commit_message}\n\n**Files Affected**: ${result.changed_files?.length || 0} files\n\n✅ **Status**: Changes have been undone in production repository`,
+          transcript: 'Drop latest commit from TODO-UI'
+        }]);
+
+        // Clear the last GitHub push info
+        setLastGithubPush(null);
+      } else {
+        setMessages(prev => [...prev, {
+          status: 'error',
+          agent: 'GitHub System',
+          response: `❌ **Drop Commit Failed**\n\n${result.error || 'Unknown error occurred'}\n\nThe latest commit could not be dropped from the TODO-UI repository.`,
+          transcript: 'Drop latest commit from TODO-UI'
+        }]);
+      }
+    } catch (error) {
+      console.error('Drop commit error:', error);
+      setMessages(prev => [...prev, {
+        status: 'error',
+        agent: 'GitHub System',
+        response: `❌ **Drop Commit Error**\n\n${error instanceof Error ? error.message : String(error)}\n\nFailed to communicate with the orchestrator.`,
+        transcript: 'Drop latest commit from TODO-UI'
+      }]);
+    } finally {
+      setIsDroppingCommit(false);
+    }
+  };
+
   return (
     <div className="voice-interface">
       <div className="header">
@@ -558,6 +642,42 @@ const VoiceInterface: React.FC = () => {
           {connectionStatus}
         </div>
       </div>
+
+      {/* GitHub Push Status Section */}
+      {lastGithubPush && (
+        <div className="github-push-status">
+          <h3>🚀 Latest Push to TODO-UI Production</h3>
+          <div className="push-status-card">
+            <div className="push-info">
+              <div className="push-commit">
+                <strong>🔗 Commit:</strong> <code>{lastGithubPush.commitHash}</code>
+              </div>
+              <div className="push-timestamp">
+                <strong>📅 Pushed:</strong> {new Date(lastGithubPush.timestamp).toLocaleString()}
+              </div>
+              <div className="push-task">
+                <strong>📝 Task ID:</strong> {lastGithubPush.taskId}
+              </div>
+            </div>
+            <div className="push-actions">
+              <button
+                onClick={dropLatestCommit}
+                disabled={isDroppingCommit}
+                className="drop-commit-btn"
+                title="Drop the latest commit from TODO-UI production repository"
+              >
+                {isDroppingCommit ? '⏳ Dropping...' : '🗑️ Drop Latest Commit'}
+              </button>
+            </div>
+          </div>
+          <div className="push-warning">
+            <small>
+              ⚠️ <strong>Warning:</strong> Dropping a commit will revert the latest changes in the TODO-UI production repository. 
+              This action creates a revert commit and cannot be undone.
+            </small>
+          </div>
+        </div>
+      )}
 
       {/* Active Workflows Section */}
       {activeWorkflows.length > 0 && (
