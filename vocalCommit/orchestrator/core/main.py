@@ -1230,6 +1230,41 @@ async def rollback_task_commit(task_id: str, hard_rollback: bool = False):
         if rollback_result["status"] != "success":
             return rollback_result
         
+        # Push the rollback to GitHub if the task was originally pushed
+        github_push_result = None
+        if task.get("github_pushed"):
+            logger.info(f"Pushing rollback to GitHub for task {task_id}")
+            try:
+                # Sync the TODO-UI repository first
+                sync_result = github_ops.clone_or_pull_repo()
+                if sync_result["status"] == "success":
+                    # Create a commit message for the rollback
+                    rollback_message = f"Rollback task: {task.get('title', task_id)}"
+                    
+                    # Get the files that were originally modified
+                    modified_files = task.get("modified_files", [])
+                    
+                    # Push the rollback to GitHub
+                    github_push_result = github_ops.commit_and_push_changes(
+                        rollback_message,
+                        modified_files,
+                        {"suggestions": {"summary": "Rollback operation", "risk_assessment": "low"}}
+                    )
+                    
+                    if github_push_result["status"] == "success":
+                        logger.info(f"Successfully pushed rollback to GitHub: {github_push_result['commit_hash']}")
+                        task["github_rollback_info"] = {
+                            "commit_hash": github_push_result["commit_hash"],
+                            "pushed_at": "2024-01-23T" + str(len(completed_tasks) + 25).zfill(2) + ":00:00Z"
+                        }
+                    else:
+                        logger.error(f"Failed to push rollback to GitHub: {github_push_result.get('error', 'Unknown error')}")
+                else:
+                    logger.error(f"Failed to sync TODO-UI repo for rollback push: {sync_result.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"Error pushing rollback to GitHub: {str(e)}")
+                github_push_result = {"status": "error", "error": str(e)}
+        
         # Update task status to indicate rollback
         task["status"] = "rolled_back"
         task["rollback_info"] = {
@@ -1255,6 +1290,15 @@ async def rollback_task_commit(task_id: str, hard_rollback: bool = False):
         logger.info(f"Successfully rolled back task {task_id} ({'hard' if hard_rollback else 'soft'} rollback)")
         
         # Send rollback notification via WebSocket
+        github_status_msg = ""
+        if task.get("github_pushed"):
+            if github_push_result and github_push_result["status"] == "success":
+                github_status_msg = f"\n🚀 **GitHub**: Rollback pushed to production ({task['github_rollback_info']['commit_hash'][:8]})"
+            elif github_push_result:
+                github_status_msg = f"\n⚠️ **GitHub**: Failed to push rollback - {github_push_result.get('error', 'Unknown error')}"
+            else:
+                github_status_msg = f"\n⚠️ **GitHub**: Rollback not pushed to production"
+        
         rollback_message = {
             "type": "task_rolled_back",
             "task_id": task_id,
@@ -1262,7 +1306,9 @@ async def rollback_task_commit(task_id: str, hard_rollback: bool = False):
             "transcript": task["title"],
             "rollback_type": "hard" if hard_rollback else "soft",
             "rolled_back_commit": rollback_result["rolled_back_commit"],
-            "message": f"🔄 **Task Rolled Back**\n\n**{task['title']}**\n\n{'🗑️ Hard rollback: All changes discarded' if hard_rollback else '📝 Soft rollback: Changes kept as unstaged'}\n\n🔗 **Commit**: {rollback_result['rolled_back_commit']}"
+            "github_rollback_pushed": github_push_result["status"] == "success" if github_push_result else False,
+            "github_rollback_info": task.get("github_rollback_info"),
+            "message": f"🔄 **Task Rolled Back**\n\n**{task['title']}**\n\n{'🗑️ Hard rollback: All changes discarded' if hard_rollback else '📝 Soft rollback: Changes kept as unstaged'}\n\n🔗 **Local Commit**: {rollback_result['rolled_back_commit']}{github_status_msg}"
         }
         
         # Broadcast to all connected WebSocket clients
@@ -1406,6 +1452,41 @@ async def approve_task_commit(task_id: str):
                 "error": f"Task {task_id} is already approved"
             }
         
+        # Push to GitHub if not already pushed
+        github_push_result = None
+        if not task.get("github_pushed"):
+            logger.info(f"Pushing approved commit to GitHub for task {task_id}")
+            try:
+                # Sync the TODO-UI repository first
+                sync_result = github_ops.clone_or_pull_repo()
+                if sync_result["status"] == "success":
+                    # Get task details for GitHub push
+                    modified_files = task.get("modified_files", [])
+                    
+                    # Push the approved commit to GitHub
+                    github_push_result = github_ops.commit_and_push_changes(
+                        task.get("title", f"Approved task {task_id}"),
+                        modified_files,
+                        {"suggestions": task.get("gemini_analysis", {"summary": "Approved commit", "risk_assessment": "low"})}
+                    )
+                    
+                    if github_push_result["status"] == "success":
+                        logger.info(f"Successfully pushed approved commit to GitHub: {github_push_result['commit_hash']}")
+                        task["github_pushed"] = True
+                        task["github_commit_info"] = {
+                            "commit_hash": github_push_result["commit_hash"],
+                            "commit_message": github_push_result["commit_message"],
+                            "timestamp": github_push_result["timestamp"],
+                            "pushed_at": "2024-01-23T" + str(len(completed_tasks) + 35).zfill(2) + ":00:00Z"
+                        }
+                    else:
+                        logger.error(f"Failed to push approved commit to GitHub: {github_push_result.get('error', 'Unknown error')}")
+                else:
+                    logger.error(f"Failed to sync TODO-UI repo for approval push: {sync_result.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"Error pushing approved commit to GitHub: {str(e)}")
+                github_push_result = {"status": "error", "error": str(e)}
+        
         # Mark task as approved
         task["status"] = "approved"
         task["approval_info"] = {
@@ -1429,13 +1510,24 @@ async def approve_task_commit(task_id: str):
         logger.info(f"Task {task_id} commit approved and finalized")
         
         # Send approval notification via WebSocket
+        github_status_msg = ""
+        if github_push_result:
+            if github_push_result["status"] == "success":
+                github_status_msg = f"\n🚀 **GitHub**: Pushed to production ({task['github_commit_info']['commit_hash'][:8]})"
+            else:
+                github_status_msg = f"\n⚠️ **GitHub**: Failed to push - {github_push_result.get('error', 'Unknown error')}"
+        elif task.get("github_pushed"):
+            github_status_msg = f"\n🚀 **GitHub**: Already pushed to production"
+        
         approval_message = {
             "type": "commit_approved",
             "task_id": task_id,
             "status": "approved",
             "transcript": task["title"],
             "commit_hash": task["commit_info"]["commit_hash"],
-            "message": f"✅ **Commit Approved**\n\n**{task['title']}**\n\n🔒 Changes are now final (rollback no longer available)\n\n🔗 **Commit**: {task['commit_info']['commit_hash']}"
+            "github_pushed": task.get("github_pushed", False),
+            "github_commit_info": task.get("github_commit_info"),
+            "message": f"✅ **Commit Approved**\n\n**{task['title']}**\n\n🔒 Changes are now final (rollback no longer available)\n\n🔗 **Local Commit**: {task['commit_info']['commit_hash']}{github_status_msg}"
         }
         
         # Broadcast to all connected WebSocket clients

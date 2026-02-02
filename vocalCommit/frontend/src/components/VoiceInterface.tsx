@@ -39,6 +39,11 @@ interface AgentResponse {
   commit_hash?: string; // For WebSocket notifications
   reverted_commit?: string; // For drop commit responses
   changed_files?: string[]; // For drop commit responses
+  github_rollback_pushed?: boolean; // For rollback with GitHub push
+  github_rollback_info?: {
+    commit_hash?: string;
+    pushed_at?: string;
+  };
   test_results?: {
     status: string;
     tests_run: string[];
@@ -217,6 +222,15 @@ const VoiceInterface: React.FC = () => {
                 setShowCommitModal(false);
                 setCurrentCommitTask(null);
               }
+            }
+            
+            // Handle GitHub push status for approved commits
+            if (response.status === 'approved' && response.github_pushed && response.github_commit_info) {
+              setLastGithubPush({
+                taskId: response.task_id,
+                commitHash: response.github_commit_info.commit_hash,
+                timestamp: response.github_commit_info.timestamp || new Date().toISOString()
+              });
             }
           }
 
