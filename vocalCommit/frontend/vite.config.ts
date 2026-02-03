@@ -7,5 +7,10 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: parseInt(process.env.PORT || '5173'),
+    allowedHosts: [
+      'vocalcommit-admin.onrender.com',
+      'localhost',
+      '127.0.0.1'
+    ],
   },
 })
