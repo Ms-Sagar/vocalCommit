@@ -84,6 +84,10 @@
 
   --delete-btn-bg: var(--color-danger-accent);
   --delete-btn-hover-bg: #c82333;
+  
+  /* NEW: Edit button colors */
+  --edit-btn-bg: var(--color-info-accent); /* Using the info accent color */
+  --edit-btn-hover-bg: #0a4651; /* A slightly darker shade for hover */
 
   --shadow-card: 0 2px 10px rgba(0,0,0,0.1);
   --shadow-card-hover: 0 4px 20px rgba(0,0,0,0.15);
@@ -495,8 +499,8 @@ body {
 .todo-actions {
   display: flex; /* Added for alignment of action elements */
   align-items: center; /* Added for vertical alignment of action elements */
-  justify-content: space-between; /* Added to spread action elements */
-  gap: 15px; /* Added for spacing between action elements */
+  justify-content: flex-end; /* Align buttons to the right */
+  gap: 10px; /* Adjusted gap for multiple buttons */
   flex-wrap: wrap; /* Added for responsiveness */
   margin-bottom: 20px; /* Standardize spacing before border */
   padding-bottom: 15px;
@@ -862,6 +866,30 @@ body {
   transform: translateY(-1px);
 }
 
+/* NEW: Edit button styles, similar to delete-btn */
+.edit-btn {
+  background: var(--edit-btn-bg);
+  color: var(--text-light);
+  border: none;
+  width: 40px; /* Fixed width for a square button */
+  height: 40px; /* Fixed height for a square button */
+  padding: 0; /* No internal padding */
+  border-radius: 8px; /* Consistent with other action buttons */
+  font-size: 1.2rem; /* Size of the icon */
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0; /* Prevent button from shrinking */
+  display: flex; /* Use flexbox to center the icon */
+  align-items: center;
+  justify-content: center;
+}
+
+.edit-btn:hover {
+  background: var(--edit-btn-hover-bg);
+  transform: translateY(-1px);
+}
+
+
 /* Responsive Styles */
 @media (max-width: 768px) {
   .controls {
@@ -891,22 +919,13 @@ body {
   }
   
   /* .todo-actions flex-wrap handles this automatically but can be refined if needed */
-  /* .todo-actions {
-    flex-direction: column;
-    align-items: stretch;
-  } */
+  .todo-actions {
+    justify-content: center; /* Center actions on small screens */
+    padding-bottom: 10px; /* Slightly less padding on mobile */
+  }
   
   .status-controls {
     justify-content: space-between;
-  }
-  
-  /* .delete-btn also handles wrapping due to flex-wrap on parent */
-  /* .delete-btn {
-    width: 100%;
-  } */
-  
-  .header {
-    flex-direction: column;
-    text-align: center;
+    width: 100%; /* Ensure controls take full width */
   }
 }
