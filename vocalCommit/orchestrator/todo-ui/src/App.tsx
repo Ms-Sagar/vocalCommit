@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid'; // For generating temporary IDs
 import './App.css'; // Import the CSS styles
 import RefreshButton from './components/RefreshButton'; // NEW: Import the RefreshButton component
-import TodoFormModal from './components/TodoFormModal'; // NEW: Import the TodoFormModal component
 
 // --- Types ---
 type Filter = 'all' | 'completed' | 'active';
@@ -20,8 +19,7 @@ interface Todo {
   updatedAt: string;
 }
 
-// NEW: Interface for data handled by the form modal
-interface TodoFormData {
+interface NewTodoInput {
   title: string;
   description: string;
   priority: Priority;
@@ -129,7 +127,7 @@ function useInterval(callback: () => void, delay: number | null) {
 
 // --- Components ---
 
-// Simple Spinner Component (moved here as it's used by App and potentially child components)
+// Simple Spinner Component
 const Spinner: React.FC<{ size?: string; color?: string }> = ({ size = '1em', color = 'var(--button-text-primary)' }) => (
   <span className="spinner" style={{ width: size, height: size, borderColor: `rgba(255, 255, 255, 0.3) ${color} rgba(255, 255, 255, 0.3) ${color}` }} role="status" aria-label="Loading"></span>
 );
@@ -168,10 +166,9 @@ interface TodoCardProps {
   isBusy: boolean; // Indicates if this specific todo is undergoing a CRUD operation
   toggleTodoStatus: (id: string, newStatus: Status) => Promise<void>;
   deleteTodo: (id: string) => Promise<void>;
-  onEdit: (todo: Todo) => void; // NEW: Callback to trigger edit mode for this todo
 }
 
-const TodoCard: React.FC<TodoCardProps> = ({ todo, isBusy, toggleTodoStatus, deleteTodo, onEdit }) => {
+const TodoCard: React.FC<TodoCardProps> = ({ todo, isBusy, toggleTodoStatus, deleteTodo }) => {
   // Modified to return CSS variable names instead of hardcoded hex codes
   const getPriorityColorVar = (priority: Priority) => {
     switch (priority) {
@@ -228,38 +225,21 @@ const TodoCard: React.FC<TodoCardProps> = ({ todo, isBusy, toggleTodoStatus, del
             <option value="completed">Completed</option>
           </select>
         </div>
-        <div className="todo-action-buttons"> {/* Group buttons for better layout */}
-          <button
-            className="edit-btn"
-            onClick={() => onEdit(todo)}
-            disabled={isBusy}
-            aria-label={`Edit todo "${todo.title}"`}
-          >
-            {isBusy ? (
-              <Spinner size="1em" />
-            ) : (
-              // Pencil icon SVG
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="1.2em" height="1.2em" style={{ verticalAlign: 'middle' }} aria-hidden="true">
-                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-              </svg>
-            )}
-          </button>
-          <button
-            className="delete-btn"
-            onClick={() => deleteTodo(todo.id)}
-            disabled={isBusy}
-            aria-label={`Delete todo "${todo.title}"`}
-          >
-            {isBusy ? (
-              <Spinner size="1em" />
-            ) : (
-              // Trash icon SVG, replacing the 'Delete' text
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="1.2em" height="1.2em" style={{ verticalAlign: 'middle' }} aria-hidden="true">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-              </svg>
-            )}
-          </button>
-        </div>
+        <button
+          className="delete-btn"
+          onClick={() => deleteTodo(todo.id)}
+          disabled={isBusy}
+          aria-label={`Delete todo "${todo.title}"`}
+        >
+          {isBusy ? (
+            <Spinner size="1em" />
+          ) : (
+            // Trash icon SVG, replacing the 'Delete' text
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="1.2em" height="1.2em" style={{ verticalAlign: 'middle' }} aria-hidden="true">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -270,15 +250,13 @@ const TodoCard: React.FC<TodoCardProps> = ({ todo, isBusy, toggleTodoStatus, del
 function App() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
-  
-  // Replaced `isModalOpen` and `newTodoInput` with `isFormModalOpen` and `editingTodo`
-  const [isFormModalOpen, setIsFormModalOpen] = useState(false); // Controls the TodoFormModal
-  const [editingTodo, setEditingTodo] = useState<Todo | null>(null); // Null for add, Todo object for edit
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newTodoInput, setNewTodoInput] = useState<NewTodoInput>({ title: '', description: '', priority: 'medium' });
 
   const [isLoadingTodos, setIsLoadingTodos] = useState(true); // For initial fetch and manual refresh
   const [isPolling, setIsPolling] = useState(false); // For background polling
   const [todoLoadingStates, setTodoLoadingStates] = useState<Record<string, boolean>>({}); // For individual todo CRUD operations
-  const [isAddingTodo, setIsAddingTodo] = useState(false); // Specifically for tracking if an 'add' operation is ongoing
+  const [isAddingTodo, setIsAddingTodo] = useState(false); // For add todo modal submit
   const [globalError, setGlobalError] = useState<string | null>(null); // For persistent errors
   const [toasts, setToasts] = useState<Toast[]>([]); // For transient success/error messages
 
@@ -302,31 +280,25 @@ function App() {
     optimisticUpdate: () => void,
     onSuccess: (result: any) => void,
     onFailure: (error: Error) => void,
+    isAddOperation = false // Special handling for add operation's `isAddingTodo` state
   ) => {
     activeCrudOperations.current.add(operationId); // Mark operation as active
 
-    // Set individual todo busy state, or global adding state for new todos
-    if (operationId.startsWith('optimistic-')) { // Convention for new todo adds
-      setIsAddingTodo(true);
-    } else {
-      setTodoLoadingStates(prev => ({ ...prev, [operationId]: true }));
-    }
+    if (isAddOperation) setIsAddingTodo(true);
+    else setTodoLoadingStates(prev => ({ ...prev, [operationId]: true }));
 
     try {
       optimisticUpdate();
       const result = await apiCall();
       onSuccess(result);
+      addToast('Operation successful!', 'success');
     } catch (error: any) {
       console.error(`CRUD operation (${operationId}) failed:`, error);
       onFailure(error);
       addToast(error.message || 'An unexpected error occurred.', 'error');
     } finally {
-      // Clear individual todo busy state, or global adding state
-      if (operationId.startsWith('optimistic-')) {
-        setIsAddingTodo(false);
-      } else {
-        setTodoLoadingStates(prev => ({ ...prev, [operationId]: false }));
-      }
+      if (isAddOperation) setIsAddingTodo(false);
+      else setTodoLoadingStates(prev => ({ ...prev, [operationId]: false }));
       activeCrudOperations.current.delete(operationId); // Mark operation as complete
       // Check if no active operations left to potentially resume polling
       if (activeCrudOperations.current.size === 0 && !isPolling) {
@@ -335,7 +307,7 @@ function App() {
         console.log("All CRUD operations complete. Polling can resume.");
       }
     }
-  }, [addToast, isPolling]);
+  }, [addToast, isPolling]); // isPolling in dependency array only for logging purposes
 
   // --- Data Fetching ---
   const fetchTodos = useCallback(async (isInitialFetch = false) => {
@@ -397,95 +369,41 @@ function App() {
     activeCrudOperations.current.size === 0 ? 10000 : null // Pause interval if active CRUD ops
   );
 
-  // --- Todo Form Modal Management (Add/Edit) ---
+  // --- Todo CRUD Operations ---
 
-  const handleFormModalClose = useCallback(() => {
-    setIsFormModalOpen(false);
-    setEditingTodo(null); // Clear editing state when modal closes
-  }, []);
+  const handleAddTodo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTodoInput.title.trim()) {
+      addToast('Title cannot be empty.', 'error');
+      return;
+    }
 
-  const handleAddTodoClick = useCallback(() => {
-    setEditingTodo(null); // Ensure add mode
-    setIsFormModalOpen(true);
-  }, []);
+    const tempId = `optimistic-${uuidv4()}`; // Temporary ID for optimistic UI
+    const optimisticTodo: Todo = { ...newTodoInput, id: tempId, status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
 
-  const handleEditTodoStart = useCallback((todo: Todo) => {
-    setEditingTodo(todo); // Set todo for editing
-    setIsFormModalOpen(true);
-  }, []);
-
-  const handleUpdateTodo = useCallback(async (id: string, updates: Partial<Todo>) => {
     await handleCrudOperation(
-      id, // Use todo ID for tracking the operation
-      () => mockApi.updateTodo(id, updates),
+      tempId, // Use tempId for tracking the operation
+      () => mockApi.addTodo({ ...newTodoInput, status: 'pending' }),
       () => {
         // Optimistic update
+        setTodos((prevTodos) => [optimisticTodo, ...prevTodos]);
+      },
+      (newTodo) => {
+        // On success, replace the optimistic todo with the real one
         setTodos((prevTodos) =>
-          prevTodos.map((todo) =>
-            todo.id === id
-              ? { ...todo, ...updates, updatedAt: new Date().toISOString() }
-              : todo
-          )
+          prevTodos.map((t) => (t.id === tempId ? newTodo : t))
         );
+        setNewTodoInput({ title: '', description: '', priority: 'medium' });
+        setIsModalOpen(false);
+        addToast('Todo added successfully!', 'success');
       },
       () => {
-        addToast('Todo updated successfully!', 'success');
-        handleFormModalClose(); // Close modal on success
+        // On failure, revert optimistic update
+        setTodos((prevTodos) => prevTodos.filter((t) => t.id !== tempId));
       },
-      (error) => {
-        // Revert is implicitly handled if the next poll refreshes or if needed,
-        // the `handleCrudOperation`'s `onFailure` could revert the optimistic state.
-        // For partial updates, it's often simpler to let the next server fetch reconcile.
-        // However, if strict rollback is needed, the `originalTodo` would need to be passed
-        // or retrieved again.
-      }
+      true // This is an add operation
     );
-  }, [addToast, handleCrudOperation, handleFormModalClose]);
-
-
-  const handleFormSubmit = useCallback(async (formData: TodoFormData) => {
-    if (editingTodo) {
-      // Edit mode
-      const updatedFields: Partial<Todo> = {
-        title: formData.title,
-        description: formData.description,
-        priority: formData.priority,
-      };
-      await handleUpdateTodo(editingTodo.id, updatedFields);
-    } else {
-      // Add mode
-      if (!formData.title.trim()) {
-        addToast('Title cannot be empty.', 'error');
-        return;
-      }
-
-      const tempId = `optimistic-${uuidv4()}`; // Temporary ID for optimistic UI
-      const optimisticTodo: Todo = { ...formData, id: tempId, status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-
-      await handleCrudOperation(
-        tempId, // Use tempId for tracking the operation
-        () => mockApi.addTodo({ ...formData, status: 'pending' }),
-        () => {
-          // Optimistic update
-          setTodos((prevTodos) => [optimisticTodo, ...prevTodos]);
-        },
-        (newTodo) => {
-          // On success, replace the optimistic todo with the real one
-          setTodos((prevTodos) =>
-            prevTodos.map((t) => (t.id === tempId ? newTodo : t))
-          );
-          addToast('Todo added successfully!', 'success');
-          handleFormModalClose(); // Close modal on success
-        },
-        () => {
-          // On failure, revert optimistic update
-          setTodos((prevTodos) => prevTodos.filter((t) => t.id !== tempId));
-        }
-      );
-    }
-  }, [editingTodo, addToast, handleCrudOperation, handleUpdateTodo, handleFormModalClose]);
-
-  // --- Todo Status Toggle and Delete Operations ---
+  };
 
   const toggleTodoStatus = useCallback(async (id: string, newStatus: Status) => {
     const originalTodo = todos.find((t) => t.id === id);
@@ -560,11 +478,8 @@ function App() {
 
   const totalTodosCount = todos.length;
 
-  // Determine if the form modal is currently saving (either adding or updating an existing todo)
-  const isFormSaving = isAddingTodo || (editingTodo ? !!todoLoadingStates[editingTodo.id] : false);
-
   return (
-    <div className="app">
+    <div className="app"> {/* Removed dynamic theme class */}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       <header className="header">
@@ -635,10 +550,10 @@ function App() {
         </div>
         <button
           className="add-todo-btn"
-          onClick={handleAddTodoClick} // Use new handler
-          disabled={isFormSaving} // Disable if any form operation is saving
+          onClick={() => setIsModalOpen(true)}
+          disabled={isAddingTodo}
           aria-label="Add new todo"
-          style={{ backgroundColor: 'purple' }}
+          style={{ backgroundColor: 'purple' }} // Changed background color to purple
         >
           <span aria-hidden="true">+</span> Add New Todo
         </button>
@@ -668,21 +583,71 @@ function App() {
               isBusy={!!todoLoadingStates[todo.id]}
               toggleTodoStatus={toggleTodoStatus}
               deleteTodo={deleteTodo}
-              onEdit={handleEditTodoStart} // Pass the edit handler
             />
           ))
         )}
       </main>
 
-      {/* NEW: Use TodoFormModal component for both Add and Edit */}
-      <TodoFormModal
-        isOpen={isFormModalOpen}
-        onClose={handleFormModalClose}
-        initialData={editingTodo} // Pass the todo to edit, or null for add
-        onSubmit={handleFormSubmit}
-        isSaving={isFormSaving}
-        Spinner={Spinner} // Pass the Spinner component
-      />
+      {isModalOpen && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="add-todo-modal-title">
+          <div className="modal">
+            <div className="modal-header">
+              <h3 id="add-todo-modal-title">Add New Todo</h3>
+              <button className="close-btn" onClick={() => setIsModalOpen(false)} aria-label="Close add todo modal">
+                &times;
+              </button>
+            </div>
+            <form onSubmit={handleAddTodo}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label htmlFor="todo-title">Title</label>
+                  <input
+                    id="todo-title"
+                    type="text"
+                    value={newTodoInput.title}
+                    onChange={(e) => setNewTodoInput({ ...newTodoInput, title: e.target.value })}
+                    placeholder="e.g., Buy groceries"
+                    required
+                    aria-required="true"
+                    disabled={isAddingTodo}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="todo-description">Description</label>
+                  <textarea
+                    id="todo-description"
+                    value={newTodoInput.description}
+                    onChange={(e) => setNewTodoInput({ ...newTodoInput, description: e.target.value })}
+                    placeholder="e.g., Milk, eggs, bread, cheese"
+                    disabled={isAddingTodo}
+                  ></textarea>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="todo-priority">Priority</label>
+                  <select
+                    id="todo-priority"
+                    value={newTodoInput.priority}
+                    onChange={(e) => setNewTodoInput({ ...newTodoInput, priority: e.target.value as Priority })}
+                    disabled={isAddingTodo}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="cancel-btn" onClick={() => setIsModalOpen(false)} disabled={isAddingTodo}>
+                  Cancel
+                </button>
+                <button type="submit" className="add-btn" disabled={isAddingTodo || !newTodoInput.title.trim()}>
+                  {isAddingTodo ? <Spinner /> : null} Add Todo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <footer className="footer">
         <p>&copy; {new Date().getFullYear()} Todo App. All rights reserved.</p>

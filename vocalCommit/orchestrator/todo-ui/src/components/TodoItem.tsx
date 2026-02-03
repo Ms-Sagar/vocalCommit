@@ -20,7 +20,7 @@ interface TodoItemProps {
   todo: Todo;
   onToggleComplete: (id: string) => void;
   onDelete: (id: string) => void;
-  onEdit: (id: string) => void; // Already present, signifies the edit option
+  onEdit: (id: string) => void;
   onUpdateStatus: (id: string, newStatus: Status) => void;
   onUpdatePriority: (id: string, newPriority: Priority) => void;
 }
