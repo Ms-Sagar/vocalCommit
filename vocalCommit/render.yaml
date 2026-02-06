@@ -3,7 +3,7 @@ services:
   - type: web
     name: vocalcommit-backend
     env: python
-    root: orchestrator
+    rootDir: orchestrator
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn core.main:app --host 0.0.0.0 --port $PORT
     plan: free
@@ -21,7 +21,7 @@ services:
   - type: web
     name: vocalcommit-frontend
     env: node
-    root: frontend
+    rootDir: frontend
     buildCommand: npm install && npm run build
     startCommand: npm run preview
     plan: free
