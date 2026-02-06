@@ -100,7 +100,7 @@ const VoiceInterface: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const [generatingFiles, setGeneratingFiles] = useState<{ [key: string]: boolean }>({});
-  const [filesGenerated, setFilesGenerated] = useState<{ [key: string]: boolean }>({});
+  // const [filesGenerated, setFilesGenerated] = useState<{ [key: string]: boolean }>({});
   const [completedTasks, setCompletedTasks] = useState<{ [key: string]: AgentResponse }>({});
   const [commitActions, setCommitActions] = useState<{ [key: string]: boolean }>({});
   const [showCommitModal, setShowCommitModal] = useState(false);
@@ -112,40 +112,40 @@ const VoiceInterface: React.FC = () => {
   const wsRef = useRef<WebSocket | null>(null);
 
   // Helper functions for display names
-  const getStepDisplayName = (step: string): string => {
-    const stepMap: { [key: string]: string } = {
-      'pm_completed': 'PM Analysis Complete',
-      'pm_analysis': 'PM Analysis',
-      'dev_completed': 'Development Complete',
-      'dev_analysis': 'Development Analysis',
-      'dev_implementation': 'Development Implementation',
-      'security_completed': 'Security Review Complete',
-      'security_analysis': 'Security Analysis',
-      'devops_completed': 'DevOps Review Complete',
-      'devops_analysis': 'DevOps Analysis',
-      'code_review': 'Code Review',
-      'testing': 'Testing Phase',
-      'deployment': 'Deployment Phase'
-    };
+  // const getStepDisplayName = (step: string): string => {
+  //   const stepMap: { [key: string]: string } = {
+  //     'pm_completed': 'PM Analysis Complete',
+  //     'pm_analysis': 'PM Analysis',
+  //     'dev_completed': 'Development Complete',
+  //     'dev_analysis': 'Development Analysis',
+  //     'dev_implementation': 'Development Implementation',
+  //     'security_completed': 'Security Review Complete',
+  //     'security_analysis': 'Security Analysis',
+  //     'devops_completed': 'DevOps Review Complete',
+  //     'devops_analysis': 'DevOps Analysis',
+  //     'code_review': 'Code Review',
+  //     'testing': 'Testing Phase',
+  //     'deployment': 'Deployment Phase'
+  //   };
 
-    return stepMap[step] || step.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
+  //   return stepMap[step] || step.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  // };
 
-  const getNextAgentDisplayName = (nextStep: string): string => {
-    const agentMap: { [key: string]: string } = {
-      'dev_agent': 'Development Agent',
-      'pm_agent': 'Project Manager Agent',
-      'security_agent': 'Security Agent',
-      'devops_agent': 'DevOps Agent',
-      'testing_agent': 'Testing Agent',
-      'code_review_agent': 'Code Review Agent',
-      'completion': 'Task Completion',
-      'manual_review': 'Manual Review',
-      'final_review': 'Final Review'
-    };
+  // const getNextAgentDisplayName = (nextStep: string): string => {
+  //   const agentMap: { [key: string]: string } = {
+  //     'dev_agent': 'Development Agent',
+  //     'pm_agent': 'Project Manager Agent',
+  //     'security_agent': 'Security Agent',
+  //     'devops_agent': 'DevOps Agent',
+  //     'testing_agent': 'Testing Agent',
+  //     'code_review_agent': 'Code Review Agent',
+  //     'completion': 'Task Completion',
+  //     'manual_review': 'Manual Review',
+  //     'final_review': 'Final Review'
+  //   };
 
-    return agentMap[nextStep] || nextStep.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  };
+  //   return agentMap[nextStep] || nextStep.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  // };
 
   useEffect(() => {
     // Initialize WebSocket connection
@@ -227,8 +227,8 @@ const VoiceInterface: React.FC = () => {
             // Handle GitHub push status for approved commits
             if (response.status === 'approved' && response.github_pushed && response.github_commit_info) {
               setLastGithubPush({
-                taskId: response.task_id,
-                commitHash: response.github_commit_info.commit_hash,
+                taskId: response.task_id || '',
+                commitHash: response.github_commit_info.commit_hash || '',
                 timestamp: response.github_commit_info.timestamp || new Date().toISOString()
               });
             }
@@ -409,75 +409,75 @@ const VoiceInterface: React.FC = () => {
 
   // Removed handleApproval since dev approval is no longer required
 
-  const generateFilesForTask = async (taskId: string) => {
-    // Prevent multiple clicks
-    if (generatingFiles[taskId]) {
-      return;
-    }
+  // const generateFilesForTask = async (taskId: string) => {
+  //   // Prevent multiple clicks
+  //   if (generatingFiles[taskId]) {
+  //     return;
+  //   }
 
-    try {
-      // Set generating state
-      setGeneratingFiles(prev => ({
-        ...prev,
-        [taskId]: true
-      }));
+  //   try {
+  //     // Set generating state
+  //     setGeneratingFiles(prev => ({
+  //       ...prev,
+  //       [taskId]: true
+  //     }));
 
-      // Show loading state
-      setMessages(prev => [...prev, {
-        status: 'info',
-        agent: 'File Generator',
-        response: `🔄 **Generating Files...**\n\nProcessing task ${taskId}...`,
-        transcript: `Generate files for ${taskId}`
-      }]);
+  //     // Show loading state
+  //     setMessages(prev => [...prev, {
+  //       status: 'info',
+  //       agent: 'File Generator',
+  //       response: `🔄 **Generating Files...**\n\nProcessing task ${taskId}...`,
+  //       transcript: `Generate files for ${taskId}`
+  //     }]);
 
-      const response = await fetch(`${API_BASE_URL}/generate-files/${taskId}`, {
-        method: 'POST'
-      });
+  //     const response = await fetch(`${API_BASE_URL}/generate-files/${taskId}`, {
+  //       method: 'POST'
+  //     });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+  //     if (!response.ok) {
+  //       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  //     }
 
-      const result = await response.json();
+  //     const result = await response.json();
 
-      if (result.status === 'success') {
-        // Mark files as generated for this task
-        setFilesGenerated(prev => ({
-          ...prev,
-          [taskId]: true
-        }));
+  //     if (result.status === 'success') {
+  //       // Mark files as generated for this task
+  //       setFilesGenerated(prev => ({
+  //         ...prev,
+  //         [taskId]: true
+  //       }));
 
-        setMessages(prev => [...prev, {
-          status: 'success',
-          agent: 'File Generator',
-          response: `✅ **Files Generated Successfully!**\n\n${result.message}\n\n**Generated Files:**\n${result.generated_files.map((f: any) => `• ${f.filename} (${f.size} bytes)`).join('\n')}\n\n**Location:** ${result.generated_dir || 'todo-ui/src/generated'}`,
-          transcript: `Generate files for ${taskId}`
-        }]);
-      } else {
-        setMessages(prev => [...prev, {
-          status: 'error',
-          agent: 'File Generator',
-          response: `❌ **File Generation Failed**\n\n${result.error || 'Unknown error occurred'}`,
-          transcript: `Generate files for ${taskId}`
-        }]);
-      }
-    } catch (error) {
-      console.error('Generate files error:', error);
-      setMessages(prev => [...prev, {
-        status: 'error',
-        agent: 'File Generator',
-        response: `❌ **File Generation Error**\n\n${error instanceof Error ? error.message : String(error)}`,
-        transcript: `Generate files for ${taskId}`
-      }]);
-    } finally {
-      // Clear generating state
-      setGeneratingFiles(prev => {
-        const updated = { ...prev };
-        delete updated[taskId];
-        return updated;
-      });
-    }
-  };
+  //       setMessages(prev => [...prev, {
+  //         status: 'success',
+  //         agent: 'File Generator',
+  //         response: `✅ **Files Generated Successfully!**\n\n${result.message}\n\n**Generated Files:**\n${result.generated_files.map((f: any) => `• ${f.filename} (${f.size} bytes)`).join('\n')}\n\n**Location:** ${result.generated_dir || 'todo-ui/src/generated'}`,
+  //         transcript: `Generate files for ${taskId}`
+  //       }]);
+  //     } else {
+  //       setMessages(prev => [...prev, {
+  //         status: 'error',
+  //         agent: 'File Generator',
+  //         response: `❌ **File Generation Failed**\n\n${result.error || 'Unknown error occurred'}`,
+  //         transcript: `Generate files for ${taskId}`
+  //       }]);
+  //     }
+  //   } catch (error) {
+  //     console.error('Generate files error:', error);
+  //     setMessages(prev => [...prev, {
+  //       status: 'error',
+  //       agent: 'File Generator',
+  //       response: `❌ **File Generation Error**\n\n${error instanceof Error ? error.message : String(error)}`,
+  //       transcript: `Generate files for ${taskId}`
+  //     }]);
+  //   } finally {
+  //     // Clear generating state
+  //     setGeneratingFiles(prev => {
+  //       const updated = { ...prev };
+  //       delete updated[taskId];
+  //       return updated;
+  //     });
+  //   }
+  // };
 
   // Removed startEditingWorkflow and saveWorkflowEdit since approvals are no longer required
 
