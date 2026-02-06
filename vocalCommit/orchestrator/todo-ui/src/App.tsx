@@ -495,9 +495,7 @@ function App() {
           )}
           <RefreshButton
             onClick={() => fetchTodos(true)}
-            disabled={isLoadingTodos || activeCrudOperations.current.size > 0}
-            isLoading={isLoadingTodos}
-            ariaLabel={isLoadingTodos ? "Loading todos" : (activeCrudOperations.current.size > 0 ? "Operations pending, cannot refresh" : "Refresh todos")}
+            isLoading={isLoadingTodos || activeCrudOperations.current.size > 0}
           />
         </div>
       </header>
