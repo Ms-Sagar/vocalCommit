@@ -26,12 +26,8 @@ services:
     startCommand: npm run preview
     plan: free
     envVars:
-      - key: VITE_API_URL
-        fromService:
-          type: web
-          name: vocalcommit-backend
-          property: url
       - key: PORT
         value: 10000
-      # Add VITE_WS_URL manually in Render dashboard after backend is deployed
+      # Add these manually in Render dashboard after backend is deployed:
+      # VITE_API_URL=https://vocalcommit-backend.onrender.com
       # VITE_WS_URL=wss://vocalcommit-backend.onrender.com/ws
