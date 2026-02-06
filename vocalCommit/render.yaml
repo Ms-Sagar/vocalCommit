@@ -1,14 +1,21 @@
 services:
-  # Backend Service
+  # Backend Service (Orchestrator)
   - type: web
     name: vocalcommit-backend
     env: python
     root: orchestrator
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn core.main:app --host 0.0.0.0 --port $PORT
+    plan: free
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: ENVIRONMENT
+        value: production
+      # Add your secrets in Render dashboard:
+      # - GOOGLE_API_KEY
+      # - GITHUB_TOKEN
+      # - Any other secrets from your .env file
 
   # Frontend Static Site
   - type: static
@@ -17,9 +24,13 @@ services:
     root: frontend
     buildCommand: npm install && npm run build
     publishDir: dist
+    plan: free
     envVars:
       - key: VITE_API_URL
         fromService:
           type: web
           name: vocalcommit-backend
           property: url
+      - key: VITE_WS_URL
+        sync: false
+        # Will be set manually: wss://vocalcommit-backend.onrender.com/ws
