@@ -99,7 +99,7 @@ const VoiceInterface: React.FC = () => {
   const [activeWorkflows, setActiveWorkflows] = useState<TaskWorkflow[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
-  const [generatingFiles, setGeneratingFiles] = useState<{ [key: string]: boolean }>({});
+  // const [generatingFiles, setGeneratingFiles] = useState<{ [key: string]: boolean }>({});
   // const [filesGenerated, setFilesGenerated] = useState<{ [key: string]: boolean }>({});
   const [completedTasks, setCompletedTasks] = useState<{ [key: string]: AgentResponse }>({});
   const [commitActions, setCommitActions] = useState<{ [key: string]: boolean }>({});
