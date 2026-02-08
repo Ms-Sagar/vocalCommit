@@ -288,13 +288,17 @@ class GitHubOperations:
                                gemini_suggestions: Dict[str, Any]) -> Dict[str, Any]:
         """Commit changes and push to GitHub with Gemini analysis. Always pulls latest changes first."""
         try:
+            # CRITICAL: Configure git pull strategy first
+            logger.info("Configuring git pull strategy")
+            self._run_git_command(["config", "pull.rebase", "false"])
+            
             # CRITICAL: Always pull latest changes before committing
             logger.info("Pulling latest changes from TODO-UI repository before committing")
-            pull_result = self._run_git_command(["pull", "origin", "main"])
+            pull_result = self._run_git_command(["pull", "origin", "main", "--no-edit"])
             
             if pull_result["status"] != "success":
                 # Try master branch if main fails
-                pull_result = self._run_git_command(["pull", "origin", "master"])
+                pull_result = self._run_git_command(["pull", "origin", "master", "--no-edit"])
             
             if pull_result["status"] != "success":
                 logger.warning(f"Failed to pull latest changes: {pull_result.get('stderr', 'Unknown error')}")
