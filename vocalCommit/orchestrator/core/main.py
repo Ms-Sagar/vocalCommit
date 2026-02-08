@@ -107,7 +107,7 @@ async def get_rate_limit_status():
 async def get_api_key_status():
     """Get Gemini API key status by testing it with the API."""
     from tools.rate_limiter import get_gemini_api_status
-    import google.generativeai as genai
+    import google.genai as genai
     
     logger.info("API key status requested")
     logger.info(f"Current settings.gemini_api_key: {settings.gemini_api_key[:8] if settings.gemini_api_key else 'None'}...")
@@ -134,40 +134,61 @@ async def get_api_key_status():
     
     # Test the API key by making a simple API call
     try:
-        genai.configure(api_key=settings.gemini_api_key)
+        client = genai.Client(api_key=settings.gemini_api_key)
         
         # Try to list models - this will fail if key is invalid
-        models = genai.list_models()
-        model_list = list(models)
-        
-        if model_list:
-            logger.info(f"API key is valid - found {len(model_list)} models")
-            logger.info(f"Returning masked key: {masked_key}")
+        try:
+            models = client.models.list()
+            model_count = len(list(models)) if models else 0
             
-            return {
-                "status": "active",
-                "configured": True,
-                "masked_key": masked_key,
-                "message": "API key is valid and working",
-                "quota_info": quota_info,
-                "models_available": len(model_list)
-            }
-        else:
-            logger.warning("API key validation returned no models")
-            return {
-                "status": "invalid",
-                "configured": True,
-                "masked_key": masked_key,
-                "message": "API key is configured but returned no models",
-                "quota_info": quota_info
-            }
+            if model_count > 0:
+                logger.info(f"API key is valid - found {model_count} models")
+                logger.info(f"Returning masked key: {masked_key}")
+                
+                return {
+                    "status": "active",
+                    "configured": True,
+                    "masked_key": masked_key,
+                    "message": "API key is valid and working",
+                    "quota_info": quota_info,
+                    "models_available": model_count
+                }
+            else:
+                logger.warning("API key validation returned no models")
+                return {
+                    "status": "invalid",
+                    "configured": True,
+                    "masked_key": masked_key,
+                    "message": "API key is configured but returned no models",
+                    "quota_info": quota_info
+                }
+        except Exception as list_error:
+            # If listing models fails, try a simple generation to test the key
+            logger.info(f"Model listing failed, trying simple generation: {list_error}")
+            try:
+                response = client.models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents='test'
+                )
+                if response:
+                    logger.info("API key is valid - generation test passed")
+                    return {
+                        "status": "active",
+                        "configured": True,
+                        "masked_key": masked_key,
+                        "message": "API key is valid and working",
+                        "quota_info": quota_info
+                    }
+            except Exception as gen_error:
+                logger.error(f"Generation test also failed: {gen_error}")
+                raise list_error  # Raise the original error
             
     except Exception as e:
         error_msg = str(e).lower()
         logger.error(f"API key validation failed: {e}")
         
         # Check for specific error types
-        if "api key not valid" in error_msg or "invalid api key" in error_msg or "invalid_argument" in error_msg:
+        if "api key not valid" in error_msg or "invalid api key" in error_msg or "invalid_argument" in error_msg or "api_key_invalid" in error_msg:
             return {
                 "status": "invalid",
                 "configured": True,
@@ -176,7 +197,7 @@ async def get_api_key_status():
                 "quota_info": quota_info,
                 "error_details": str(e)
             }
-        elif "quota" in error_msg or "resource_exhausted" in error_msg:
+        elif "quota" in error_msg or "resource_exhausted" in error_msg or "429" in error_msg:
             return {
                 "status": "quota_exceeded",
                 "configured": True,
