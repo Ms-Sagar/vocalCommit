@@ -49,7 +49,7 @@ def push_initial_content():
     """Push the initial todo-ui content to GitHub."""
     print("🚀 Starting TODO-UI GitHub push process...")
     
-    # Step 1: Setup the repository
+    # Step 1: Setup the repository (clone or pull)
     print("\n📦 Setting up GitHub repository...")
     setup_result = github_ops.clone_or_pull_repo()
     print(f"Repository setup: {setup_result['status']}")
@@ -59,6 +59,10 @@ def push_initial_content():
         return False
     
     print(f"✅ Repository {setup_result['action']}: {setup_result['message']}")
+    
+    # IMPORTANT: If we pulled, we already have the latest changes
+    if setup_result['action'] == 'pulled':
+        print("📥 Latest changes pulled from TODO-UI repository")
     
     # Step 2: Copy todo-ui content to the repo
     print("\n📁 Copying todo-ui content...")

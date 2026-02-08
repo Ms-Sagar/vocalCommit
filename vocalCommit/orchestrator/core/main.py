@@ -740,10 +740,10 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "type": "ui_editing"
         }
         
-        # Production workflow: Sync repo, get AI suggestions, and push to GitHub
-        logger.info(f"Starting production workflow for task {task_id}")
+        # Production workflow: Sync repo, get AI suggestions, and push to GitHub ONLY
+        logger.info(f"Starting production workflow for task {task_id} - TODO-UI repository only")
         
-        # Step 1: Sync the todo-ui repository
+        # Step 1: Sync the todo-ui repository (pull existing changes)
         sync_result = github_ops.clone_or_pull_repo()
         if sync_result["status"] != "success":
             logger.error(f"Failed to sync todo-ui repo: {sync_result.get('error', 'Unknown error')}")
@@ -764,32 +764,18 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             logger.warning(f"Gemini AI analysis failed: {gemini_suggestions.get('error', 'Unknown error')}")
             task_data["gemini_analysis"] = gemini_suggestions.get("suggestions", {})
         
-        # Step 3: Commit and push changes to GitHub (requires approval)
-        # Store the data for approval workflow
+        # Step 3: Commit and push changes to GitHub TODO-UI repository ONLY
+        # NO LOCAL COMMITS TO VOCALCOMMIT - Production pushes to TODO-UI only
         task_data["pending_github_push"] = True
         task_data["github_ready"] = sync_result["status"] == "success"
         
-        # Commit changes to local git (original behavior)
-        logger.info(f"Committing changes locally for task {task_id}")
-        commit_result = git_ops.commit_changes(
-            message=approval_data["transcript"],
-            task_id=task_id,
-            modified_files=modified_files
-        )
+        # Store commit info placeholder (will be filled when GitHub push is approved)
+        task_data["commit_info"] = {
+            "status": "pending_github_push",
+            "message": "Changes ready for GitHub push - no local commit"
+        }
         
-        if commit_result["status"] == "success":
-            task_data["commit_info"] = {
-                "commit_hash": commit_result["commit_hash"],
-                "commit_message": commit_result["commit_message"],
-                "timestamp": commit_result["timestamp"]
-            }
-            logger.info(f"Successfully committed changes for task {task_id}: {commit_result['commit_hash']}")
-        else:
-            logger.warning(f"Failed to commit changes for task {task_id}: {commit_result.get('error', 'Unknown error')}")
-            task_data["commit_info"] = {
-                "status": "failed",
-                "error": commit_result.get("error", "Unknown error")
-            }
+        logger.info(f"Task {task_id} ready for GitHub push - skipping local vocalCommit commit")
         
         completed_tasks[task_id] = task_data
         
@@ -810,16 +796,11 @@ async def process_task_in_background(task_id: str, approval_data: dict):
         logger.info(f"Background processing completed successfully for task {task_id}")
         
         # Send completion notification via WebSocket to connected clients
-        commit_info_msg = ""
         github_info_msg = ""
         
-        if task_data.get("commit_info", {}).get("commit_hash"):
-            commit_info_msg = f"\n🔗 **Local Commit**: {task_data['commit_info']['commit_hash']}"
-        elif task_data.get("commit_info", {}).get("status") == "failed":
-            commit_info_msg = f"\n⚠️ **Commit Failed**: {task_data['commit_info']['error']}"
-        
+        # Production mode: No local commits, only GitHub pushes
         if task_data.get("github_ready"):
-            github_info_msg = f"\n🚀 **GitHub Ready**: Awaiting approval to push to production"
+            github_info_msg = f"\n🚀 **GitHub Ready**: Awaiting approval to push to TODO-UI production"
             if task_data.get("gemini_analysis", {}).get("risk_assessment"):
                 risk = task_data["gemini_analysis"]["risk_assessment"]
                 confidence = task_data["gemini_analysis"].get("confidence", 0.0)
@@ -839,7 +820,7 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "gemini_analysis": task_data.get("gemini_analysis"),
             "github_ready": task_data.get("github_ready", False),
             "pending_github_push": task_data.get("pending_github_push", False),
-            "message": f"🎉 **Task Completed!**\n\n**{approval_data['transcript']}**\n\n📁 Modified {len(modified_files)} files\n🌐 View changes at http://localhost:5174{commit_info_msg}{github_info_msg}"
+            "message": f"🎉 **Task Completed!**\n\n**{approval_data['transcript']}**\n\n📁 Modified {len(modified_files)} files\n🌐 View changes at http://localhost:5174{github_info_msg}"
         }
         
         # Broadcast to all connected WebSocket clients

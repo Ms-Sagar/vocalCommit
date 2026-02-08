@@ -219,8 +219,22 @@ class GitHubOperations:
     
     def commit_and_push_changes(self, task_description: str, modified_files: List[str], 
                                gemini_suggestions: Dict[str, Any]) -> Dict[str, Any]:
-        """Commit changes and push to GitHub with Gemini analysis."""
+        """Commit changes and push to GitHub with Gemini analysis. Always pulls latest changes first."""
         try:
+            # CRITICAL: Always pull latest changes before committing
+            logger.info("Pulling latest changes from TODO-UI repository before committing")
+            pull_result = self._run_git_command(["pull", "origin", "main"])
+            
+            if pull_result["status"] != "success":
+                # Try master branch if main fails
+                pull_result = self._run_git_command(["pull", "origin", "master"])
+            
+            if pull_result["status"] != "success":
+                logger.warning(f"Failed to pull latest changes: {pull_result.get('stderr', 'Unknown error')}")
+                # Continue anyway, but log the warning
+            else:
+                logger.info("Successfully pulled latest changes from TODO-UI repository")
+            
             # Check if there are any changes to commit
             status_result = self._run_git_command(["status", "--porcelain"])
             
@@ -283,7 +297,7 @@ class GitHubOperations:
                     "pushed": False
                 }
             
-            logger.info(f"Successfully committed and pushed changes: {commit_hash}")
+            logger.info(f"Successfully committed and pushed changes to TODO-UI: {commit_hash}")
             
             return {
                 "status": "success",

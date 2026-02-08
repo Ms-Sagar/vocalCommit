@@ -305,13 +305,20 @@ OUTPUT REQUIREMENTS:
         logger.info(f"Gemini returned {len(response.text)} characters")
         
         # 5. HANDLE DEPENDENCIES (Before writing the file)
+        # DISABLED IN PRODUCTION: Automatic package installation is disabled when ENVIRONMENT=production
         new_code = response.text
-        dependency_result = handle_code_dependencies(file_path, new_code)
+        environment = os.getenv('ENVIRONMENT', 'development').lower()
         
-        if dependency_result['status'] == 'partial_success':
-            logger.warning(f"Some dependencies failed to install: {dependency_result.get('failed_dependencies', [])}")
-        elif dependency_result['status'] == 'success' and dependency_result.get('successful_dependencies'):
-            logger.info(f"Successfully installed dependencies: {dependency_result['successful_dependencies']}")
+        if environment == 'production':
+            logger.info("Skipping automatic dependency installation (ENVIRONMENT=production)")
+            dependency_result = {'status': 'skipped', 'message': 'Automatic dependency installation disabled in production'}
+        else:
+            dependency_result = handle_code_dependencies(file_path, new_code)
+            
+            if dependency_result['status'] == 'partial_success':
+                logger.warning(f"Some dependencies failed to install: {dependency_result.get('failed_dependencies', [])}")
+            elif dependency_result['status'] == 'success' and dependency_result.get('successful_dependencies'):
+                logger.info(f"Successfully installed dependencies: {dependency_result['successful_dependencies']}")
         
         # 6. OVERWRITE THE FILE (The "Replace" Strategy)
         with open(file_path, "w") as f:
