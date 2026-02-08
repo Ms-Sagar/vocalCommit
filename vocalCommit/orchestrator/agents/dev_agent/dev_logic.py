@@ -293,8 +293,17 @@ OUTPUT REQUIREMENTS:
             logger.info(f"Gemini API response received for {target_filename}: {len(response.text) if response and response.text else 0} characters")
             
         except Exception as e:
-            error_msg = f"Error calling Gemini API for {target_filename}: {str(e)}"
-            logger.error(error_msg)
+            error_str = str(e)
+            
+            # Check if it's a rate limit error
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+                error_msg = f"❌ Gemini API Rate Limit: {target_filename} - 429 RESOURCE_EXHAUSTED. Please update your API key in .env file."
+                logger.error(error_msg)
+                logger.error("🔑 ACTION REQUIRED: Update GEMINI_API_KEY in vocalCommit/orchestrator/.env")
+            else:
+                error_msg = f"Error calling Gemini API for {target_filename}: {error_str}"
+                logger.error(error_msg)
+            
             return error_msg
         
         if not response or not response.text:

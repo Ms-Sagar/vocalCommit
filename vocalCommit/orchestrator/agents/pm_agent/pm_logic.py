@@ -186,8 +186,26 @@ class PMAgent:
             }
             
         except Exception as e:
-            logger.error(f"Error calling Gemini API: {str(e)}")
-            return self._fallback_plan(transcript, is_ui_editing)
+            error_str = str(e)
+            
+            # Check if it's a rate limit error
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+                logger.error(f"❌ Gemini API Rate Limit: 429 RESOURCE_EXHAUSTED")
+                logger.error("🔑 ACTION REQUIRED: Update GEMINI_API_KEY in vocalCommit/orchestrator/.env")
+                
+                # Return error instead of fallback for rate limit issues
+                return {
+                    "status": "error",
+                    "agent": self.name,
+                    "error": "api_rate_limit",
+                    "message": (
+                        "🚫 Gemini API rate limit exceeded (429 RESOURCE_EXHAUSTED). "
+                        "Please update your API key in the .env file and restart the orchestrator."
+                    )
+                }
+            else:
+                logger.error(f"Error calling Gemini API: {error_str}")
+                return self._fallback_plan(transcript, is_ui_editing)
     
     def _fallback_plan(self, transcript: str, is_ui_editing: bool = False) -> Dict[str, Any]:
         """Fallback plan when Gemini API is not available."""

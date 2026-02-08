@@ -682,6 +682,27 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         pm_result = await pm_agent.plan_task(transcript, is_ui_editing=True)
         
         if pm_result["status"] != "success":
+            # Check if it's a rate limit error
+            if pm_result.get("error") == "api_rate_limit":
+                return {
+                    "status": "error",
+                    "agent": "PM Agent",
+                    "error_type": "api_rate_limit",
+                    "response": (
+                        f"🚫 **API Rate Limit Exceeded**\n\n"
+                        f"**Task**: {transcript}\n\n"
+                        f"❌ **Error**: Gemini API has reached its rate limit (429 RESOURCE_EXHAUSTED)\n\n"
+                        f"🔑 **Action Required**: Please update your Gemini API key\n\n"
+                        f"**Steps to fix:**\n"
+                        f"1. Get a new API key from [Google AI Studio](https://aistudio.google.com/apikey)\n"
+                        f"2. Update `GEMINI_API_KEY` in `vocalCommit/orchestrator/.env`\n"
+                        f"3. Restart the orchestrator\n"
+                        f"4. Retry your task\n\n"
+                        f"💡 **Tip**: Free tier has limited requests per minute. Consider upgrading for higher limits."
+                    ),
+                    "transcript": transcript
+                }
+            
             return {
                 "status": "error",
                 "agent": "PM Agent",
@@ -870,14 +891,42 @@ async def process_task_in_background(task_id: str, approval_data: dict):
         if dev_result["status"] not in ["success", "partial_success"]:
             # Task failed
             error_details = dev_result.get("errors", ["Unknown error"])
+            
+            # Check if it's a Gemini API rate limit error
+            error_str = str(error_details).lower()
+            is_rate_limit = "429" in error_str or "resource_exhausted" in error_str or "quota" in error_str
+            
+            if is_rate_limit:
+                # Rate limit error - ask user to change API key
+                error_type = "api_rate_limit"
+                error_message = "Gemini API rate limit exceeded"
+                user_message = (
+                    f"🚫 **API Rate Limit Exceeded**\n\n"
+                    f"**Task**: {approval_data['transcript']}\n\n"
+                    f"❌ **Error**: Gemini API has reached its rate limit (429 RESOURCE_EXHAUSTED)\n\n"
+                    f"🔑 **Action Required**: Please update your Gemini API key\n\n"
+                    f"**Steps to fix:**\n"
+                    f"1. Get a new API key from Google AI Studio\n"
+                    f"2. Update GEMINI_API_KEY in `vocalCommit/orchestrator/.env`\n"
+                    f"3. Restart the orchestrator\n"
+                    f"4. Retry your task\n\n"
+                    f"💡 **Tip**: Free tier has limited requests per minute. Consider upgrading for higher limits."
+                )
+            else:
+                # Other error
+                error_type = "ui_editing_failed"
+                error_message = "Dev agent failed to modify UI files"
+                user_message = f"❌ **Task Failed**\n\n**{approval_data['transcript']}**\n\nErrors occurred during processing"
+            
             completed_tasks[task_id] = {
                 "task_id": task_id,
                 "transcript": approval_data["transcript"],
                 "status": "error",
                 "completed_at": "2024-01-23T" + str(len(completed_tasks) + 10).zfill(2) + ":00:00Z",
-                "type": "ui_editing_failed",
-                "error": "Dev agent failed to modify UI files",
-                "error_details": error_details
+                "type": error_type,
+                "error": error_message,
+                "error_details": error_details,
+                "is_rate_limit": is_rate_limit
             }
             
             # Move to failed state
@@ -885,8 +934,9 @@ async def process_task_in_background(task_id: str, approval_data: dict):
                 "transcript": approval_data["transcript"],
                 "status": "failed",
                 "failed_at": "2024-01-23T10:00:00Z",
-                "error": "Dev agent failed to modify UI files",
-                "error_details": error_details
+                "error": error_message,
+                "error_details": error_details,
+                "is_rate_limit": is_rate_limit
             }
             
             # Remove from active state
@@ -902,7 +952,9 @@ async def process_task_in_background(task_id: str, approval_data: dict):
                 "status": "failed",
                 "transcript": approval_data["transcript"],
                 "errors": error_details,
-                "message": f"❌ **Task Failed**\n\n**{approval_data['transcript']}**\n\nErrors occurred during processing"
+                "is_rate_limit": is_rate_limit,
+                "error_type": error_type,
+                "message": user_message
             }
             
             # Broadcast to all connected WebSocket clients

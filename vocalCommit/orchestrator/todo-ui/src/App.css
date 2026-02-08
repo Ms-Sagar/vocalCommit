@@ -95,10 +95,10 @@
   --status-completed-color: var(--color-success-accent);
   --status-in-progress-color: var(--color-warning-accent);
 
-  /* Add New Todo Button Specific Purple Colors */
-  --color-add-todo-btn-start: #8A2BE2; /* Blue Violet */
-  --color-add-todo-btn-end: #9932CC;   /* Dark Orchid */
-  --shadow-add-todo-btn-hover: 0 4px 10px rgba(138, 43, 226, 0.3); /* Shadow based on start color */
+  /* Add New Todo Button Specific Brown Colors */
+  --color-add-todo-btn-start: #A0522D;   /* Sienna */
+  --color-add-todo-btn-end: #8B4513;     /* SaddleBrown */
+  --shadow-add-todo-btn-hover: 0 4px 10px rgba(160, 82, 45, 0.3); /* Shadow based on start color (Sienna) */
 }
 
 /* Apply theme background and default text color to body */
