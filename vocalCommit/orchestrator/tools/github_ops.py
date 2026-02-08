@@ -217,6 +217,60 @@ class GitHubOperations:
                 }
             }
     
+    def sync_files_to_repo(self, modified_files: List[str], source_base: Path) -> Dict[str, Any]:
+        """
+        Sync modified files from source to the GitHub repo.
+        
+        Args:
+            modified_files: List of file paths relative to source_base
+            source_base: Base path where the source files are located
+            
+        Returns:
+            Dict containing sync result
+        """
+        try:
+            import shutil
+            
+            synced_files = []
+            failed_files = []
+            
+            for file_path in modified_files:
+                try:
+                    source_file = source_base / file_path
+                    target_file = self.local_path / file_path
+                    
+                    if not source_file.exists():
+                        logger.warning(f"Source file not found: {source_file}")
+                        failed_files.append(str(file_path))
+                        continue
+                    
+                    # Create target directory if needed
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copy the file
+                    shutil.copy2(source_file, target_file)
+                    synced_files.append(str(file_path))
+                    logger.info(f"Synced file: {file_path}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to sync {file_path}: {str(e)}")
+                    failed_files.append(str(file_path))
+            
+            return {
+                "status": "success" if synced_files else "error",
+                "synced_files": synced_files,
+                "failed_files": failed_files,
+                "total_synced": len(synced_files),
+                "message": f"Synced {len(synced_files)} files to GitHub repo"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error syncing files to repo: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     def commit_and_push_changes(self, task_description: str, modified_files: List[str], 
                                gemini_suggestions: Dict[str, Any]) -> Dict[str, Any]:
         """Commit changes and push to GitHub with Gemini analysis. Always pulls latest changes first."""

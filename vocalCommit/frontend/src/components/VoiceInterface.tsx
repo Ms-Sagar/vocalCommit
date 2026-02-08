@@ -208,7 +208,7 @@ const VoiceInterface: React.FC = () => {
           }
 
           // Handle commit approval/rollback notifications
-          if (response.status === 'rolled_back' || response.status === 'approved') {
+          if (response.status === 'rolled_back' || response.status === 'approved' || response.type === 'commit_approved') {
             // Remove from completed tasks
             if (response.task_id) {
               setCompletedTasks(prev => {
@@ -225,7 +225,7 @@ const VoiceInterface: React.FC = () => {
             }
             
             // Handle GitHub push status for approved commits
-            if (response.status === 'approved' && response.github_pushed && response.github_commit_info) {
+            if ((response.status === 'approved' || response.type === 'commit_approved') && response.github_pushed && response.github_commit_info) {
               setLastGithubPush({
                 taskId: response.task_id || '',
                 commitHash: response.github_commit_info.commit_hash || '',
