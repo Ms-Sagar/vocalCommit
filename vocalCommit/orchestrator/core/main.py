@@ -400,31 +400,34 @@ async def get_admin_workflows():
             "workflow_type": "active"
         })
     
-    # Add completed workflows (with commit info and rollback options)
+    # Add completed workflows (with commit info and approval options)
     for task_id, task in completed_tasks.items():
         if task.get("status") == "completed":
             commit_info = task.get("commit_info", {})
             has_commit = bool(commit_info.get("commit_hash"))
             
-            # Determine available actions based on GitHub status
+            # Determine available actions based on commit and push status
             actions = []
-            if task.get("pending_github_push") and task.get("github_ready"):
+            if task.get("awaiting_push_approval") and has_commit:
                 actions.append("approve_github_push")
             
             if has_commit and not task.get("github_pushed"):
-                actions.extend(["approve_commit", "rollback_soft", "rollback_hard"])
+                actions.extend(["rollback_soft", "rollback_hard"])
             elif task.get("github_pushed"):
                 actions.append("revert_github_push")
             
-            # Determine status based on GitHub workflow
+            # Determine status based on commit/push workflow
             if task.get("github_pushed"):
                 status = "pushed_to_production"
                 description = f"Pushed to production - {len(task.get('modified_files', []))} files live"
-            elif task.get("pending_github_push"):
-                status = "awaiting_github_approval"
-                description = f"Ready for production - awaiting GitHub push approval"
+            elif task.get("awaiting_push_approval"):
+                status = "awaiting_push_approval"
+                description = f"Committed locally - awaiting approval to push to remote"
+            elif task.get("commit_failed"):
+                status = "commit_failed"
+                description = f"Commit failed - {task.get('commit_error', 'Unknown error')}"
             else:
-                status = "completed_awaiting_approval"
+                status = "completed"
                 description = f"Completed - {len(task.get('modified_files', []))} files modified"
             
             workflows.append({
@@ -437,11 +440,10 @@ async def get_admin_workflows():
                 "updatedAt": task.get("updatedAt", "2024-01-23T10:00:00Z"),
                 "workflow_type": "completed",
                 "commit_info": commit_info,
-                "github_commit_info": task.get("github_commit_info"),
                 "has_commit": has_commit,
-                "github_ready": task.get("github_ready", False),
                 "github_pushed": task.get("github_pushed", False),
-                "pending_github_push": task.get("pending_github_push", False),
+                "awaiting_push_approval": task.get("awaiting_push_approval", False),
+                "commit_failed": task.get("commit_failed", False),
                 "gemini_analysis": task.get("gemini_analysis"),
                 "can_rollback": has_commit and not task.get("github_pushed"),
                 "can_revert_github": task.get("github_pushed", False),
@@ -1003,42 +1005,62 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "type": "ui_editing"
         }
         
-        # Production workflow: Sync repo, get AI suggestions, and push to GitHub ONLY
-        logger.info(f"Starting production workflow for task {task_id} - TODO-UI repository only")
+        # NEW WORKFLOW: Commit locally immediately, then ask for approval before pushing
+        logger.info(f"[COMMIT] Starting local commit workflow for task {task_id}")
         
         # Step 1: Sync the todo-ui repository (pull existing changes)
+        logger.info(f"[COMMIT] Step 1: Syncing TODO-UI repository")
         sync_result = github_ops.clone_or_pull_repo()
         if sync_result["status"] != "success":
-            logger.error(f"Failed to sync todo-ui repo: {sync_result.get('error', 'Unknown error')}")
+            logger.error(f"[COMMIT] Failed to sync todo-ui repo: {sync_result.get('error', 'Unknown error')}")
             task_data["github_sync_error"] = sync_result.get("error", "Unknown error")
+            task_data["commit_failed"] = True
         else:
-            logger.info(f"Successfully synced todo-ui repo: {sync_result['action']}")
+            logger.info(f"[COMMIT] Successfully synced todo-ui repo: {sync_result['action']}")
         
         # Step 2: Get Gemini AI suggestions for the changes
+        logger.info(f"[COMMIT] Step 2: Getting AI analysis")
         gemini_suggestions = github_ops.get_gemini_suggestions(
             approval_data["transcript"], 
             modified_files
         )
         
         if gemini_suggestions["status"] == "success":
-            logger.info(f"Gemini AI analysis completed with {gemini_suggestions['suggestions']['confidence']:.2f} confidence")
+            logger.info(f"[COMMIT] Gemini AI analysis completed with {gemini_suggestions['suggestions']['confidence']:.2f} confidence")
             task_data["gemini_analysis"] = gemini_suggestions["suggestions"]
         else:
-            logger.warning(f"Gemini AI analysis failed: {gemini_suggestions.get('error', 'Unknown error')}")
+            logger.warning(f"[COMMIT] Gemini AI analysis failed: {gemini_suggestions.get('error', 'Unknown error')}")
             task_data["gemini_analysis"] = gemini_suggestions.get("suggestions", {})
         
-        # Step 3: Commit and push changes to GitHub TODO-UI repository ONLY
-        # NO LOCAL COMMITS TO VOCALCOMMIT - Production pushes to TODO-UI only
-        task_data["pending_github_push"] = True
-        task_data["github_ready"] = sync_result["status"] == "success"
+        # Step 3: Commit changes locally (DO NOT PUSH YET)
+        if sync_result["status"] == "success":
+            logger.info(f"[COMMIT] Step 3: Committing changes locally (no push)")
+            commit_result = github_ops.commit_changes_locally(
+                approval_data["transcript"],
+                modified_files,
+                {"suggestions": task_data.get("gemini_analysis", {})}
+            )
+            
+            if commit_result["status"] == "success":
+                logger.info(f"[COMMIT] ✅ Successfully committed locally: {commit_result['commit_hash']}")
+                task_data["has_commit"] = True
+                task_data["commit_info"] = {
+                    "commit_hash": commit_result["commit_hash"],
+                    "commit_message": commit_result["commit_message"],
+                    "timestamp": commit_result["timestamp"],
+                    "status": "committed_locally"
+                }
+                task_data["awaiting_push_approval"] = True
+                task_data["github_pushed"] = False
+            else:
+                logger.error(f"[COMMIT] ❌ Failed to commit locally: {commit_result.get('error', 'Unknown error')}")
+                task_data["commit_failed"] = True
+                task_data["commit_error"] = commit_result.get("error", "Unknown error")
+        else:
+            logger.error(f"[COMMIT] Skipping commit due to sync failure")
+            task_data["commit_failed"] = True
         
-        # Store commit info placeholder (will be filled when GitHub push is approved)
-        task_data["commit_info"] = {
-            "status": "pending_github_push",
-            "message": "Changes ready for GitHub push - no local commit"
-        }
-        
-        logger.info(f"Task {task_id} ready for GitHub push - skipping local vocalCommit commit")
+        logger.info(f"[COMMIT] Task {task_id} committed locally, awaiting approval to push to remote")
         
         completed_tasks[task_id] = task_data
         
@@ -1626,13 +1648,13 @@ async def rollback_task_commit(task_id: str, hard_rollback: bool = False):
 @app.post("/approve-github-push/{task_id}")
 async def approve_github_push(task_id: str):
     """
-    Approve pushing changes to GitHub production repository.
+    Approve pushing already committed changes to GitHub remote repository.
     
     Args:
         task_id: Task identifier
     """
     try:
-        # Check if task exists and is ready for GitHub push
+        # Check if task exists and is ready for push
         if task_id not in completed_tasks:
             return {
                 "status": "error",
@@ -1641,24 +1663,28 @@ async def approve_github_push(task_id: str):
         
         task = completed_tasks[task_id]
         
-        if not task.get("pending_github_push"):
+        if not task.get("awaiting_push_approval"):
             return {
                 "status": "error",
-                "error": f"Task {task_id} is not pending GitHub push approval"
+                "error": f"Task {task_id} is not awaiting push approval"
             }
         
-        if not task.get("github_ready"):
+        if not task.get("has_commit"):
             return {
                 "status": "error",
-                "error": f"Task {task_id} is not ready for GitHub push (sync failed)"
+                "error": f"Task {task_id} has no local commit to push"
             }
         
-        # Perform GitHub push
-        push_result = github_ops.commit_and_push_changes(
-            task["title"],
-            task["modified_files"],
-            {"suggestions": task.get("gemini_analysis", {})}
-        )
+        if task.get("github_pushed"):
+            return {
+                "status": "error",
+                "error": f"Task {task_id} has already been pushed to GitHub"
+            }
+        
+        logger.info(f"[APPROVAL] Pushing approved commit to GitHub for task {task_id}")
+        
+        # Push the already committed changes
+        push_result = github_ops.push_committed_changes()
         
         if push_result["status"] != "success":
             return {
@@ -1668,16 +1694,12 @@ async def approve_github_push(task_id: str):
             }
         
         # Update task status
-        task["pending_github_push"] = False
+        task["awaiting_push_approval"] = False
         task["github_pushed"] = True
-        task["github_commit_info"] = {
-            "commit_hash": push_result["commit_hash"],
-            "commit_message": push_result["commit_message"],
-            "timestamp": push_result["timestamp"],
-            "pushed_at": "2024-01-23T" + str(len(completed_tasks) + 40).zfill(2) + ":00:00Z"
-        }
+        task["commit_info"]["status"] = "pushed_to_remote"
+        task["commit_info"]["pushed_at"] = datetime.now().isoformat()
         
-        logger.info(f"Task {task_id} successfully pushed to GitHub: {push_result['commit_hash']}")
+        logger.info(f"[APPROVAL] ✅ Task {task_id} successfully pushed to GitHub: {push_result['commit_hash']}")
         
         # Send GitHub push notification via WebSocket
         push_message = {
@@ -1702,7 +1724,7 @@ async def approve_github_push(task_id: str):
             "task_id": task_id,
             "commit_hash": push_result["commit_hash"],
             "message": f"Task {task_id} successfully pushed to GitHub production repository",
-            "github_commit_info": task["github_commit_info"]
+            "commit_info": task["commit_info"]
         }
         
     except Exception as e:

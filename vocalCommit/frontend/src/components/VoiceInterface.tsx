@@ -121,9 +121,6 @@ const VoiceInterface: React.FC = () => {
   const [currentCommitTask, setCurrentCommitTask] = useState<{ taskId: string, task: AgentResponse } | null>(null);
   const [isDroppingCommit, setIsDroppingCommit] = useState(false);
   const [lastGithubPush, setLastGithubPush] = useState<{ taskId: string, commitHash: string, timestamp: string } | null>(null);
-  const [showLogsModal, setShowLogsModal] = useState(false);
-  const [recentLogs, setRecentLogs] = useState<string[]>([]);
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   
   // API Key Management State
   const [apiKeyStatus, setApiKeyStatus] = useState<{
@@ -145,27 +142,6 @@ const VoiceInterface: React.FC = () => {
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-
-  // Fetch logs function
-  const fetchLogs = async (filter?: string) => {
-    try {
-      setIsLoadingLogs(true);
-      const filterParam = filter ? `?filter=${encodeURIComponent(filter)}` : '';
-      const response = await fetch(`${API_BASE_URL}/logs${filterParam}&lines=200`);
-      const result = await response.json();
-      
-      if (result.status === 'success') {
-        setRecentLogs(result.logs || []);
-        setShowLogsModal(true);
-      } else {
-        console.error('Failed to fetch logs:', result.error);
-      }
-    } catch (error) {
-      console.error('Error fetching logs:', error);
-    } finally {
-      setIsLoadingLogs(false);
-    }
-  };
 
   // API Key Validation Function
   const validateApiKey = (key: string): { isValid: boolean; message: string } => {
@@ -750,26 +726,20 @@ const VoiceInterface: React.FC = () => {
       } else {
         console.error(`[Approval] Approval failed:`, result.error);
         
-        // Fetch logs to help debug the issue
-        await fetchLogs('APPROVAL');
-        
         setMessages(prev => [...prev, {
           status: 'error',
           agent: 'Git System',
-          response: `❌ **Approval Failed**\n\n${result.error || 'Unknown error occurred'}\n\n💡 **Tip**: Check the logs for more details (click "View Logs" button)`,
+          response: `❌ **Approval Failed**\n\n${result.error || 'Unknown error occurred'}`,
           transcript: `Approve commit for ${taskId}`
         }]);
       }
     } catch (error) {
       console.error('[Approval] Approve commit error:', error);
       
-      // Fetch logs to help debug the issue
-      await fetchLogs('APPROVAL');
-      
       setMessages(prev => [...prev, {
         status: 'error',
         agent: 'Git System',
-        response: `❌ **Approval Error**\n\n${error instanceof Error ? error.message : String(error)}\n\n💡 **Tip**: Check the logs for more details (click "View Logs" button)`,
+        response: `❌ **Approval Error**\n\n${error instanceof Error ? error.message : String(error)}`,
         transcript: `Approve commit for ${taskId}`
       }]);
     } finally {
@@ -1278,14 +1248,6 @@ const VoiceInterface: React.FC = () => {
             >
               ⏹️ Stop
             </button>
-
-            <button
-              onClick={() => fetchLogs()}
-              className="voice-btn logs"
-              title="View orchestrator logs"
-            >
-              📋 View Logs
-            </button>
           </div>
         </div>
 
@@ -1580,52 +1542,6 @@ const VoiceInterface: React.FC = () => {
                   Close
                 </button>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Logs Modal */}
-      {showLogsModal && (
-        <div className="modal-overlay">
-          <div className="modal logs-modal">
-            <div className="modal-header">
-              <h3>📋 Orchestrator Logs</h3>
-              <button onClick={() => setShowLogsModal(false)} className="close-btn">
-                ×
-              </button>
-            </div>
-
-            <div className="modal-content">
-              <div className="logs-container">
-                {isLoadingLogs ? (
-                  <div className="loading-logs">Loading logs...</div>
-                ) : recentLogs.length > 0 ? (
-                  <pre className="logs-content">
-                    {recentLogs.join('')}
-                  </pre>
-                ) : (
-                  <div className="no-logs">No logs available</div>
-                )}
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <button onClick={() => fetchLogs()} className="refresh-btn modal-btn">
-                🔄 Refresh All Logs
-              </button>
-              <button onClick={() => fetchLogs('APPROVAL')} className="filter-btn modal-btn">
-                🔍 Filter: APPROVAL
-              </button>
-              <button onClick={() => fetchLogs('GITHUB')} className="filter-btn modal-btn">
-                🔍 Filter: GITHUB
-              </button>
-              <button onClick={() => fetchLogs('ERROR')} className="filter-btn modal-btn">
-                ❌ Filter: ERROR
-              </button>
-              <button onClick={() => setShowLogsModal(false)} className="cancel-btn modal-btn">
-                Close
-              </button>
             </div>
           </div>
         </div>

@@ -551,7 +551,7 @@ function App() {
           onClick={() => setIsModalOpen(true)}
           disabled={isAddingTodo}
           aria-label="Add new todo"
-          style={{ backgroundColor: 'brown' }} // Changed background color to brown
+          style={{ backgroundColor: 'green' }} // Changed background color to green
         >
           <span aria-hidden="true">+</span> Add New Todo
         </button>

@@ -79,8 +79,9 @@
 
   --cancel-btn-bg: var(--color-secondary-accent);
   --cancel-btn-hover-bg: #545b62;
-  --add-btn-bg: var(--color-primary-accent);
-  --add-btn-hover-bg: #0056b3;
+  /* Changed the add-btn (used in modals) to green */
+  --add-btn-bg: var(--color-success-accent); 
+  --add-btn-hover-bg: #218838; /* A slightly darker green for hover */
 
   --delete-btn-bg: var(--color-danger-accent);
   --delete-btn-hover-bg: #c82333;
@@ -95,10 +96,10 @@
   --status-completed-color: var(--color-success-accent);
   --status-in-progress-color: var(--color-warning-accent);
 
-  /* Add New Todo Button Specific Brown Colors */
-  --color-add-todo-btn-start: #A0522D;   /* Sienna */
-  --color-add-todo-btn-end: #8B4513;     /* SaddleBrown */
-  --shadow-add-todo-btn-hover: 0 4px 10px rgba(160, 82, 45, 0.3); /* Shadow based on start color (Sienna) */
+  /* Add New Todo Button Specific Green Colors */
+  --color-add-todo-btn-start: var(--color-primary-gradient-start);
+  --color-add-todo-btn-end: var(--color-primary-gradient-end);
+  --shadow-add-todo-btn-hover: var(--shadow-btn-hover-success);
 }
 
 /* Apply theme background and default text color to body */
