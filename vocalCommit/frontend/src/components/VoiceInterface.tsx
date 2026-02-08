@@ -35,7 +35,7 @@ interface AgentResponse {
     pushed_at?: string;
   };
   github_push_error?: string;
-  type?: string; // For WebSocket message types like 'github_pushed', 'commit_dropped'
+  type?: string; // For WebSocket message types like 'github_pushed', 'commit_dropped', 'task_failed'
   commit_hash?: string; // For WebSocket notifications
   reverted_commit?: string; // For drop commit responses
   changed_files?: string[]; // For drop commit responses
@@ -52,6 +52,20 @@ interface AgentResponse {
     build_test?: any;
     functional_validation?: any;
     recommendations?: string[];
+  };
+  // Error handling fields
+  errors?: any;
+  error_type?: string; // 'quota_exceeded', 'invalid_key', 'general_error'
+  is_quota_exceeded?: boolean;
+  is_invalid_key?: boolean;
+  action_required?: string; // 'update_api_key', etc.
+  // Production mode fields
+  pending_github_push?: boolean;
+  github_ready?: boolean;
+  gemini_analysis?: {
+    risk_assessment?: string;
+    confidence?: number;
+    [key: string]: any;
   };
 }
 
@@ -107,9 +121,88 @@ const VoiceInterface: React.FC = () => {
   const [currentCommitTask, setCurrentCommitTask] = useState<{ taskId: string, task: AgentResponse } | null>(null);
   const [isDroppingCommit, setIsDroppingCommit] = useState(false);
   const [lastGithubPush, setLastGithubPush] = useState<{ taskId: string, commitHash: string, timestamp: string } | null>(null);
+  
+  // API Key Management State
+  const [apiKeyStatus, setApiKeyStatus] = useState<{
+    status: string;
+    configured: boolean;
+    masked_key?: string;
+    message: string;
+    quota_info?: any;
+    error_details?: string;
+  } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [newApiKey, setNewApiKey] = useState('');
+  const [isUpdatingApiKey, setIsUpdatingApiKey] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // API Key Management Functions (defined early so they can be used in useEffect)
+  const fetchApiKeyStatus = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api-key-status`);
+      if (response.ok) {
+        const data = await response.json();
+        setApiKeyStatus(data);
+      }
+    } catch (error) {
+      console.error('Error fetching API key status:', error);
+    }
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const updateApiKey = async () => {
+    if (!newApiKey.trim() || isUpdatingApiKey) return;
+
+    try {
+      setIsUpdatingApiKey(true);
+
+      const response = await fetch(`${API_BASE_URL}/update-api-key`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ api_key: newApiKey.trim() })
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        setMessages(prev => [...prev, {
+          status: 'success',
+          agent: 'System',
+          response: `✅ **API Key Updated**\n\n${result.message}\n\n🔑 **New Key**: ${result.masked_key}`,
+          transcript: 'Update Gemini API key'
+        }]);
+
+        // Refresh API key status
+        await fetchApiKeyStatus();
+
+        // Close modal and clear input
+        setShowApiKeyModal(false);
+        setNewApiKey('');
+      } else {
+        setMessages(prev => [...prev, {
+          status: 'error',
+          agent: 'System',
+          response: `❌ **API Key Update Failed**\n\n${result.message}`,
+          transcript: 'Update Gemini API key'
+        }]);
+      }
+    } catch (error) {
+      console.error('Error updating API key:', error);
+      setMessages(prev => [...prev, {
+        status: 'error',
+        agent: 'System',
+        response: `❌ **API Key Update Error**\n\n${error instanceof Error ? error.message : String(error)}`,
+        transcript: 'Update Gemini API key'
+      }]);
+    } finally {
+      setIsUpdatingApiKey(false);
+    }
+  };
 
   // Helper functions for display names
   // const getStepDisplayName = (step: string): string => {
@@ -147,6 +240,13 @@ const VoiceInterface: React.FC = () => {
   //   return agentMap[nextStep] || nextStep.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   // };
 
+  // Fetch API key status on mount and periodically
+  useEffect(() => {
+    fetchApiKeyStatus();
+    const interval = setInterval(fetchApiKeyStatus, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     // Initialize WebSocket connection
     const connectWebSocket = () => {
@@ -166,6 +266,24 @@ const VoiceInterface: React.FC = () => {
           // Update workflow tracking
           updateWorkflowStatus(response);
 
+          // Handle task failures (especially quota exceeded)
+          if (response.type === 'task_failed' || response.status === 'failed') {
+            console.log('Task failed:', response.task_id, 'Error type:', response.error_type);
+            
+            // If quota exceeded or invalid key, automatically refresh API key status
+            if (response.is_quota_exceeded || response.is_invalid_key) {
+              fetchApiKeyStatus();
+              
+              // Show a prominent notification
+              if (response.is_quota_exceeded) {
+                // Automatically open API key modal after a short delay
+                setTimeout(() => {
+                  setShowApiKeyModal(true);
+                }, 2000);
+              }
+            }
+          }
+
           // Handle completed tasks for commit approval
           if (response.status === 'completed' && response.task_id) {
             console.log('Received completed task:', response.task_id, 'with commit_info:', response.commit_info);
@@ -183,8 +301,10 @@ const VoiceInterface: React.FC = () => {
               });
             }
 
-            // Show commit approval popup for successful commits (local commits only)
-            if (response.commit_info?.commit_hash && !response.github_pushed) {
+            // Show commit approval popup for tasks pending GitHub push (production mode)
+            // OR for tasks with local commits that haven't been pushed yet
+            if ((response.pending_github_push && response.github_ready) || 
+                (response.commit_info?.commit_hash && !response.github_pushed)) {
               setCurrentCommitTask({
                 taskId: response.task_id,
                 task: response
@@ -652,10 +772,104 @@ const VoiceInterface: React.FC = () => {
     <div className="voice-interface">
       <div className="header">
         <h1>🎤 VocalCommit Admin - Voice Orchestrated SDLC</h1>
-        <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-          {connectionStatus}
+        <div className="header-status">
+          <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+            {connectionStatus}
+          </div>
+          {apiKeyStatus && (
+            <div 
+              className={`api-key-status ${apiKeyStatus.status}`}
+              onClick={() => setShowApiKeyModal(true)}
+              title="Click to manage API key"
+            >
+              {apiKeyStatus.status === 'active' && '🔑 API Key: Active'}
+              {apiKeyStatus.status === 'quota_exceeded' && '⚠️ API Quota Exceeded'}
+              {apiKeyStatus.status === 'invalid' && '❌ API Key Invalid'}
+              {apiKeyStatus.status === 'missing' && '❌ API Key Missing'}
+              {apiKeyStatus.status === 'error' && '⚠️ API Key Error'}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* API Key Management Modal */}
+      {showApiKeyModal && (
+        <div className="modal-overlay">
+          <div className="modal api-key-modal">
+            <div className="modal-header">
+              <h3>🔑 Gemini API Key Management</h3>
+              <button onClick={() => { setShowApiKeyModal(false); setNewApiKey(''); }} className="close-btn">
+                ×
+              </button>
+            </div>
+
+            <div className="modal-content">
+              <div className="api-key-status-details">
+                <div className={`status-badge ${apiKeyStatus?.status}`}>
+                  Status: {apiKeyStatus?.status?.toUpperCase()}
+                </div>
+                <p className="status-message">{apiKeyStatus?.message}</p>
+                
+                {apiKeyStatus?.masked_key && (
+                  <div className="current-key">
+                    <strong>Current Key:</strong> <code>{apiKeyStatus.masked_key}</code>
+                  </div>
+                )}
+
+                {apiKeyStatus?.quota_info && (
+                  <div className="quota-info">
+                    <h4>Quota Information:</h4>
+                    <div className="quota-details">
+                      <div>Remaining Requests: {apiKeyStatus.quota_info.remaining_requests}/{apiKeyStatus.quota_info.max_requests_per_minute} per minute</div>
+                      {apiKeyStatus.quota_info.reset_in_seconds > 0 && (
+                        <div>Reset in: {Math.ceil(apiKeyStatus.quota_info.reset_in_seconds)}s</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {apiKeyStatus?.error_details && (
+                  <div className="error-details">
+                    <strong>Error Details:</strong>
+                    <pre>{apiKeyStatus.error_details}</pre>
+                  </div>
+                )}
+              </div>
+
+              <div className="api-key-update-section">
+                <h4>Update API Key</h4>
+                <p className="help-text">
+                  Get your API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
+                </p>
+                <input
+                  type="password"
+                  value={newApiKey}
+                  onChange={(e) => setNewApiKey(e.target.value)}
+                  placeholder="Enter new Gemini API key..."
+                  className="api-key-input"
+                  onKeyPress={(e) => e.key === 'Enter' && updateApiKey()}
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                onClick={() => { setShowApiKeyModal(false); setNewApiKey(''); }}
+                className="cancel-btn modal-btn"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={updateApiKey}
+                disabled={!newApiKey.trim() || isUpdatingApiKey}
+                className="approve-btn modal-btn primary"
+              >
+                {isUpdatingApiKey ? '⏳ Updating...' : '✅ Update API Key'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* GitHub Push Status Section */}
       {lastGithubPush && (
@@ -689,6 +903,42 @@ const VoiceInterface: React.FC = () => {
               ⚠️ <strong>Warning:</strong> Dropping a commit will revert the latest changes in the TODO-UI production repository. 
               This action creates a revert commit and cannot be undone.
             </small>
+          </div>
+        </div>
+      )}
+
+      {/* API Error Banner (Quota Exceeded / Invalid Key) */}
+      {apiKeyStatus && (apiKeyStatus.status === 'quota_exceeded' || apiKeyStatus.status === 'invalid') && (
+        <div className={`api-error-banner ${apiKeyStatus.status}`}>
+          <div className="error-banner-content">
+            <div className="error-icon">
+              {apiKeyStatus.status === 'quota_exceeded' ? '⚠️' : '❌'}
+            </div>
+            <div className="error-details">
+              <h3>
+                {apiKeyStatus.status === 'quota_exceeded' ? 'API Quota Exceeded' : 'Invalid API Key'}
+              </h3>
+              <p>{apiKeyStatus.message}</p>
+              {apiKeyStatus.status === 'quota_exceeded' && apiKeyStatus.error_details && (
+                <p className="error-hint">{apiKeyStatus.error_details}</p>
+              )}
+            </div>
+            <div className="error-actions">
+              <button
+                onClick={() => setShowApiKeyModal(true)}
+                className="update-key-btn"
+              >
+                🔑 Update API Key
+              </button>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="get-key-link"
+              >
+                Get New Key →
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -754,6 +1004,23 @@ const VoiceInterface: React.FC = () => {
                 </div>
 
                 <div className="commit-info">
+                  {/* Production mode: Show GitHub push pending status */}
+                  {task.pending_github_push && task.github_ready && (
+                    <div className="github-pending-info">
+                      <div className="github-status">
+                        🚀 Ready to push to TODO-UI production
+                      </div>
+                      {task.gemini_analysis && (
+                        <div className="ai-summary">
+                          🤖 AI Risk: <span className={`risk-${task.gemini_analysis.risk_assessment}`}>
+                            {task.gemini_analysis.risk_assessment?.toUpperCase()}
+                          </span> ({((task.gemini_analysis.confidence || 0) * 100).toFixed(0)}% confidence)
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Legacy mode: Show local commit info */}
                   {task.commit_info?.commit_hash && (
                     <div className="commit-details">
                       <div className="commit-hash">
@@ -781,37 +1048,53 @@ const VoiceInterface: React.FC = () => {
                 </div>
 
                 <div className="approval-actions">
-                  <button
-                    onClick={() => approveCommit(taskId)}
-                    disabled={commitActions[taskId]}
-                    className="approve-btn"
-                  >
-                    {commitActions[taskId] ? '⏳ Approving...' : '✅ Approve Commit'}
-                  </button>
+                  {task.pending_github_push && task.github_ready ? (
+                    /* Production mode: Only show Approve button */
+                    <button
+                      onClick={() => approveCommit(taskId)}
+                      disabled={commitActions[taskId]}
+                      className="approve-btn primary-action"
+                    >
+                      {commitActions[taskId] ? '⏳ Pushing to GitHub...' : '✅ Approve & Push to GitHub'}
+                    </button>
+                  ) : (
+                    /* Legacy mode: Show all rollback options */
+                    <>
+                      <button
+                        onClick={() => approveCommit(taskId)}
+                        disabled={commitActions[taskId]}
+                        className="approve-btn"
+                      >
+                        {commitActions[taskId] ? '⏳ Approving...' : '✅ Approve Commit'}
+                      </button>
 
-                  <button
-                    onClick={() => rollbackCommit(taskId, false)}
-                    disabled={commitActions[taskId]}
-                    className="rollback-soft-btn"
-                  >
-                    {commitActions[taskId] ? '⏳ Rolling back...' : '🔄 Soft Rollback'}
-                  </button>
+                      <button
+                        onClick={() => rollbackCommit(taskId, false)}
+                        disabled={commitActions[taskId]}
+                        className="rollback-soft-btn"
+                      >
+                        {commitActions[taskId] ? '⏳ Rolling back...' : '🔄 Soft Rollback'}
+                      </button>
 
-                  <button
-                    onClick={() => rollbackCommit(taskId, true)}
-                    disabled={commitActions[taskId]}
-                    className="rollback-hard-btn"
-                  >
-                    {commitActions[taskId] ? '⏳ Rolling back...' : '🗑️ Hard Rollback'}
-                  </button>
+                      <button
+                        onClick={() => rollbackCommit(taskId, true)}
+                        disabled={commitActions[taskId]}
+                        className="rollback-hard-btn"
+                      >
+                        {commitActions[taskId] ? '⏳ Rolling back...' : '🗑️ Hard Rollback'}
+                      </button>
+                    </>
+                  )}
                 </div>
 
-                <div className="rollback-info">
-                  <small>
-                    <strong>Soft Rollback:</strong> Keeps changes as unstaged files<br />
-                    <strong>Hard Rollback:</strong> Completely discards all changes
-                  </small>
-                </div>
+                {!task.pending_github_push && (
+                  <div className="rollback-info">
+                    <small>
+                      <strong>Soft Rollback:</strong> Keeps changes as unstaged files<br />
+                      <strong>Hard Rollback:</strong> Completely discards all changes
+                    </small>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -983,7 +1266,44 @@ const VoiceInterface: React.FC = () => {
               </div>
 
               <div className="commit-details-modal">
-                {currentCommitTask.task.commit_info?.commit_hash ? (
+                {/* Production mode: Show pending GitHub push info */}
+                {currentCommitTask.task.pending_github_push && currentCommitTask.task.github_ready ? (
+                  <>
+                    <div className="github-push-pending">
+                      <strong>🚀 Ready to Push to GitHub</strong>
+                      <p>Changes are ready to be pushed to the TODO-UI production repository.</p>
+                    </div>
+
+                    {currentCommitTask.task.modified_files && currentCommitTask.task.modified_files.length > 0 && (
+                      <div className="modified-files-modal">
+                        <strong>📁 Modified Files ({currentCommitTask.task.modified_files.length}):</strong>
+                        <div className="file-list-modal">
+                          {currentCommitTask.task.modified_files.map((file, index) => (
+                            <div key={index} className="file-item">{file}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {currentCommitTask.task.gemini_analysis && (
+                      <div className="ai-analysis-modal">
+                        <strong>🤖 AI Analysis:</strong>
+                        <div className="ai-details">
+                          <div>Risk: <span className={`risk-${currentCommitTask.task.gemini_analysis.risk_assessment}`}>
+                            {currentCommitTask.task.gemini_analysis.risk_assessment?.toUpperCase()}
+                          </span></div>
+                          <div>Confidence: {((currentCommitTask.task.gemini_analysis.confidence || 0) * 100).toFixed(0)}%</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="commit-message-preview">
+                      <strong>💬 What was done:</strong>
+                      <p>{currentCommitTask.task.transcript}</p>
+                    </div>
+                  </>
+                ) : currentCommitTask.task.commit_info?.commit_hash ? (
+                  /* Legacy mode: Show local commit info */
                   <>
                     <div className="commit-hash-display">
                       <strong>🔗 Commit Hash:</strong>
@@ -1021,21 +1341,53 @@ const VoiceInterface: React.FC = () => {
               <div className="rollback-explanation">
                 <h4>Choose your action:</h4>
                 <div className="action-explanations">
-                  <div className="action-explanation">
-                    <strong>✅ Approve:</strong> Keep the changes permanently (no rollback possible)
-                  </div>
-                  <div className="action-explanation">
-                    <strong>🔄 Soft Rollback:</strong> Undo the commit but keep changes as unstaged files
-                  </div>
-                  <div className="action-explanation">
-                    <strong>🗑️ Hard Rollback:</strong> Only discard the specific files that were changed (safer)
-                  </div>
+                  {currentCommitTask.task.pending_github_push ? (
+                    <>
+                      <div className="action-explanation">
+                        <strong>✅ Approve & Push:</strong> Push changes to TODO-UI production repository on GitHub
+                      </div>
+                      <div className="action-explanation">
+                        <strong>❌ Cancel:</strong> Discard changes and don't push to GitHub
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="action-explanation">
+                        <strong>✅ Approve:</strong> Keep the changes permanently (no rollback possible)
+                      </div>
+                      <div className="action-explanation">
+                        <strong>🔄 Soft Rollback:</strong> Undo the commit but keep changes as unstaged files
+                      </div>
+                      <div className="action-explanation">
+                        <strong>🗑️ Hard Rollback:</strong> Only discard the specific files that were changed (safer)
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
 
             <div className="modal-footer">
-              {currentCommitTask.task.commit_info?.commit_hash ? (
+              {currentCommitTask.task.pending_github_push && currentCommitTask.task.github_ready ? (
+                /* Production mode: Only show Approve and Cancel */
+                <>
+                  <button
+                    onClick={() => { setShowCommitModal(false); setCurrentCommitTask(null); }}
+                    className="cancel-btn modal-btn"
+                  >
+                    ❌ Cancel
+                  </button>
+
+                  <button
+                    onClick={() => approveCommit(currentCommitTask.taskId)}
+                    disabled={commitActions[currentCommitTask.taskId]}
+                    className="approve-btn modal-btn primary"
+                  >
+                    {commitActions[currentCommitTask.taskId] ? '⏳ Pushing to GitHub...' : '✅ Approve & Push to GitHub'}
+                  </button>
+                </>
+              ) : currentCommitTask.task.commit_info?.commit_hash ? (
+                /* Legacy mode: Show all rollback options */
                 <>
                   <button
                     onClick={() => rollbackCommit(currentCommitTask.taskId, true)}

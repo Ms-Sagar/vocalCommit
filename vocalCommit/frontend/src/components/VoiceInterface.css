@@ -2299,3 +2299,132 @@
 .drop-commit-btn:hover:not(:disabled) {
   animation: drop-pulse 2s infinite;
 }
+
+/* API Error Banner Styles */
+.api-error-banner {
+  margin: 20px 0;
+  padding: 20px;
+  border-radius: 12px;
+  border-left: 5px solid;
+  animation: slideIn 0.5s ease-out;
+}
+
+.api-error-banner.quota_exceeded {
+  background: linear-gradient(135deg, #fff3cd 0%, #fffbeb 100%);
+  border-left-color: #ffc107;
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+}
+
+.api-error-banner.invalid {
+  background: linear-gradient(135deg, #f8d7da 0%, #fff5f5 100%);
+  border-left-color: #dc3545;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.2);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.error-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.error-icon {
+  font-size: 3rem;
+  flex-shrink: 0;
+}
+
+.error-details {
+  flex: 1;
+}
+
+.error-details h3 {
+  margin: 0 0 8px 0;
+  color: #495057;
+  font-size: 1.3rem;
+}
+
+.error-details p {
+  margin: 0 0 5px 0;
+  color: #6c757d;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.error-hint {
+  font-size: 0.9rem !important;
+  color: #856404 !important;
+  font-style: italic;
+}
+
+.error-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.update-key-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.update-key-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+}
+
+.get-key-link {
+  padding: 10px 20px;
+  background: white;
+  color: #007bff;
+  border: 2px solid #007bff;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  text-align: center;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.get-key-link:hover {
+  background: #007bff;
+  color: white;
+  transform: translateY(-2px);
+}
+
+/* Responsive design for error banner */
+@media (max-width: 768px) {
+  .error-banner-content {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .error-actions {
+    width: 100%;
+  }
+
+  .update-key-btn,
+  .get-key-link {
+    width: 100%;
+  }
+}

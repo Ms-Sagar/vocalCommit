@@ -17,7 +17,11 @@ class GitHubOperations:
         """Initialize GitHub operations."""
         self.token = settings.github_token
         self.repo_url = settings.todo_ui_repo_url
-        self.local_path = Path(settings.todo_ui_local_path)
+        
+        # Resolve the local path relative to the orchestrator directory
+        orchestrator_dir = Path(__file__).parent.parent
+        self.local_path = (orchestrator_dir / settings.todo_ui_local_path).resolve()
+        
         self.api_base = "https://api.github.com"
         
         # Extract owner and repo from URL
@@ -30,6 +34,7 @@ class GitHubOperations:
         self.owner, self.repo_name = repo_path.split('/')
         
         logger.info(f"GitHub operations initialized for {self.owner}/{self.repo_name}")
+        logger.info(f"Local repository path: {self.local_path}")
     
     def _run_git_command(self, command: List[str], cwd: Optional[Path] = None) -> Dict[str, Any]:
         """Execute a git command safely."""
@@ -234,10 +239,15 @@ class GitHubOperations:
             synced_files = []
             failed_files = []
             
+            logger.info(f"Starting file sync from {source_base} to {self.local_path}")
+            logger.info(f"Files to sync: {modified_files}")
+            
             for file_path in modified_files:
                 try:
                     source_file = source_base / file_path
                     target_file = self.local_path / file_path
+                    
+                    logger.info(f"Syncing: {source_file} -> {target_file}")
                     
                     if not source_file.exists():
                         logger.warning(f"Source file not found: {source_file}")
@@ -250,11 +260,14 @@ class GitHubOperations:
                     # Copy the file
                     shutil.copy2(source_file, target_file)
                     synced_files.append(str(file_path))
-                    logger.info(f"Synced file: {file_path}")
+                    logger.info(f"✓ Synced file: {file_path}")
                     
                 except Exception as e:
                     logger.error(f"Failed to sync {file_path}: {str(e)}")
                     failed_files.append(str(file_path))
+            
+            if failed_files:
+                logger.warning(f"Failed to sync {len(failed_files)} files: {failed_files}")
             
             return {
                 "status": "success" if synced_files else "error",
