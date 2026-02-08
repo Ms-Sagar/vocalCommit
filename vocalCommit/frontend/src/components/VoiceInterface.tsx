@@ -121,6 +121,9 @@ const VoiceInterface: React.FC = () => {
   const [currentCommitTask, setCurrentCommitTask] = useState<{ taskId: string, task: AgentResponse } | null>(null);
   const [isDroppingCommit, setIsDroppingCommit] = useState(false);
   const [lastGithubPush, setLastGithubPush] = useState<{ taskId: string, commitHash: string, timestamp: string } | null>(null);
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [recentLogs, setRecentLogs] = useState<string[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   
   // API Key Management State
   const [apiKeyStatus, setApiKeyStatus] = useState<{
@@ -135,9 +138,76 @@ const VoiceInterface: React.FC = () => {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [newApiKey, setNewApiKey] = useState('');
   const [isUpdatingApiKey, setIsUpdatingApiKey] = useState(false);
+  const [apiKeyValidation, setApiKeyValidation] = useState<{
+    isValid: boolean;
+    message: string;
+  } | null>(null);
 
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // Fetch logs function
+  const fetchLogs = async (filter?: string) => {
+    try {
+      setIsLoadingLogs(true);
+      const filterParam = filter ? `?filter=${encodeURIComponent(filter)}` : '';
+      const response = await fetch(`${API_BASE_URL}/logs${filterParam}&lines=200`);
+      const result = await response.json();
+      
+      if (result.status === 'success') {
+        setRecentLogs(result.logs || []);
+        setShowLogsModal(true);
+      } else {
+        console.error('Failed to fetch logs:', result.error);
+      }
+    } catch (error) {
+      console.error('Error fetching logs:', error);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  // API Key Validation Function
+  const validateApiKey = (key: string): { isValid: boolean; message: string } => {
+    if (!key.trim()) {
+      return { isValid: false, message: '' }; // Empty is okay, just disable button
+    }
+
+    // Check minimum length
+    if (key.length < 20) {
+      return { 
+        isValid: false, 
+        message: '❌ API key is too short. Minimum 20 characters required.' 
+      };
+    }
+
+    // Check for common mistakes
+    if (key.includes(' ')) {
+      return { 
+        isValid: false, 
+        message: '❌ API key contains spaces. Please remove any spaces.' 
+      };
+    }
+
+    // All checks passed
+    return { 
+      isValid: true, 
+      message: '✅ API key format looks valid' 
+    };
+  };
+
+  // Handle API key input change with validation
+  const handleApiKeyChange = (value: string) => {
+    setNewApiKey(value);
+    
+    // Validate on change
+    if (value.trim()) {
+      const validation = validateApiKey(value);
+      setApiKeyValidation(validation);
+    } else {
+      setApiKeyValidation(null);
+    }
+  };
 
   // API Key Management Functions (defined early so they can be used in useEffect)
   const fetchApiKeyStatus = async () => {
@@ -152,9 +222,15 @@ const VoiceInterface: React.FC = () => {
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const updateApiKey = async () => {
     if (!newApiKey.trim() || isUpdatingApiKey) return;
+
+    // Validate before submitting
+    const validation = validateApiKey(newApiKey);
+    if (!validation.isValid) {
+      setApiKeyValidation(validation);
+      return;
+    }
 
     try {
       setIsUpdatingApiKey(true);
@@ -169,20 +245,30 @@ const VoiceInterface: React.FC = () => {
 
       const result = await response.json();
 
-      if (result.status === 'success') {
+      if (result.status === 'success' || result.status === 'warning') {
+        const isTemporary = result.temporary === true;
+        const isProduction = result.production_mode === true;
+        
+        let responseMessage = `✅ **API Key Updated**\n\n${result.message}\n\n🔑 **New Key**: ${result.masked_key}`;
+        
+        if (isProduction && isTemporary) {
+          responseMessage += '\n\n⚠️ **Production Mode**: This change is temporary. To make it permanent:\n1. Go to your Render dashboard\n2. Navigate to your service settings\n3. Update the GEMINI_API_KEY environment variable\n4. Restart the service';
+        }
+        
         setMessages(prev => [...prev, {
-          status: 'success',
+          status: result.status === 'warning' ? 'info' : 'success',
           agent: 'System',
-          response: `✅ **API Key Updated**\n\n${result.message}\n\n🔑 **New Key**: ${result.masked_key}`,
+          response: responseMessage,
           transcript: 'Update Gemini API key'
         }]);
 
-        // Refresh API key status
+        // Refresh API key status immediately
         await fetchApiKeyStatus();
 
         // Close modal and clear input
         setShowApiKeyModal(false);
         setNewApiKey('');
+        setApiKeyValidation(null);
       } else {
         setMessages(prev => [...prev, {
           status: 'error',
@@ -606,6 +692,7 @@ const VoiceInterface: React.FC = () => {
 
     try {
       setCommitActions(prev => ({ ...prev, [taskId]: true }));
+      console.log(`[Approval] Starting approval for task: ${taskId}`);
 
       const response = await fetch(`${API_BASE_URL}/approve-commit/${taskId}`, {
         method: 'POST'
@@ -616,40 +703,73 @@ const VoiceInterface: React.FC = () => {
       }
 
       const result = await response.json();
+      console.log(`[Approval] Backend response:`, result);
 
       if (result.status === 'success') {
+        // Build detailed success message with GitHub status
+        let successMessage = `✅ **Commit Approved**\n\nTask "${completedTasks[taskId]?.transcript}" has been approved.\n\n🔗 **Commit**: ${result.commit_hash}\n\n🔒 **Status**: Changes are now final (rollback no longer available)`;
+        
+        // Add GitHub push status
+        if (result.github_pushed || result.github_commit_info) {
+          const githubHash = result.github_commit_info?.commit_hash || result.commit_hash;
+          successMessage += `\n\n🚀 **GitHub**: Successfully pushed to TODO-UI repo (${githubHash.substring(0, 8)})`;
+        } else {
+          successMessage += `\n\n⚠️ **GitHub**: Not pushed to remote (check logs for details)`;
+        }
+
         setMessages(prev => [...prev, {
           status: 'success',
           agent: 'Git System',
-          response: `✅ **Commit Approved**\n\nTask "${completedTasks[taskId]?.transcript}" has been approved.\n\n🔗 **Commit**: ${result.commit_hash}\n\n🔒 **Status**: Changes are now final (rollback no longer available)`,
+          response: successMessage,
           transcript: `Approve commit for ${taskId}`
         }]);
 
-        // Remove from completed tasks and close modal
+        // Remove from completed tasks and close modal immediately
+        console.log(`[Approval] Removing task ${taskId} from completed tasks`);
         setCompletedTasks(prev => {
           const updated = { ...prev };
           delete updated[taskId];
           return updated;
         });
 
+        // Close modal immediately
         if (currentCommitTask?.taskId === taskId) {
+          console.log(`[Approval] Closing commit modal for task ${taskId}`);
           setShowCommitModal(false);
           setCurrentCommitTask(null);
         }
+
+        // Update GitHub push status if successful
+        if (result.github_pushed && result.github_commit_info) {
+          setLastGithubPush({
+            taskId: taskId,
+            commitHash: result.github_commit_info.commit_hash,
+            timestamp: result.github_commit_info.timestamp || new Date().toISOString()
+          });
+        }
       } else {
+        console.error(`[Approval] Approval failed:`, result.error);
+        
+        // Fetch logs to help debug the issue
+        await fetchLogs('APPROVAL');
+        
         setMessages(prev => [...prev, {
           status: 'error',
           agent: 'Git System',
-          response: `❌ **Approval Failed**\n\n${result.error || 'Unknown error occurred'}`,
+          response: `❌ **Approval Failed**\n\n${result.error || 'Unknown error occurred'}\n\n💡 **Tip**: Check the logs for more details (click "View Logs" button)`,
           transcript: `Approve commit for ${taskId}`
         }]);
       }
     } catch (error) {
-      console.error('Approve commit error:', error);
+      console.error('[Approval] Approve commit error:', error);
+      
+      // Fetch logs to help debug the issue
+      await fetchLogs('APPROVAL');
+      
       setMessages(prev => [...prev, {
         status: 'error',
         agent: 'Git System',
-        response: `❌ **Approval Error**\n\n${error instanceof Error ? error.message : String(error)}`,
+        response: `❌ **Approval Error**\n\n${error instanceof Error ? error.message : String(error)}\n\n💡 **Tip**: Check the logs for more details (click "View Logs" button)`,
         transcript: `Approve commit for ${taskId}`
       }]);
     } finally {
@@ -780,13 +900,38 @@ const VoiceInterface: React.FC = () => {
             <div 
               className={`api-key-status ${apiKeyStatus.status}`}
               onClick={() => setShowApiKeyModal(true)}
-              title="Click to manage API key"
+              title={`Click to manage API key${apiKeyStatus.masked_key ? `\nCurrent: ${apiKeyStatus.masked_key}` : ''}${apiKeyStatus.quota_info ? `\nQuota: ${apiKeyStatus.quota_info.remaining_requests}/${apiKeyStatus.quota_info.max_requests_per_minute} requests remaining${apiKeyStatus.quota_info.reset_in_seconds > 0 ? `\nReset in: ${Math.ceil(apiKeyStatus.quota_info.reset_in_seconds)}s` : ''}` : ''}`}
             >
-              {apiKeyStatus.status === 'active' && '🔑 API Key: Active'}
-              {apiKeyStatus.status === 'quota_exceeded' && '⚠️ API Quota Exceeded'}
-              {apiKeyStatus.status === 'invalid' && '❌ API Key Invalid'}
-              {apiKeyStatus.status === 'missing' && '❌ API Key Missing'}
-              {apiKeyStatus.status === 'error' && '⚠️ API Key Error'}
+              <div className="status-content">
+                <div className="status-main">
+                  {apiKeyStatus.status === 'active' && '🔑 API Key: Active'}
+                  {apiKeyStatus.status === 'quota_exceeded' && '⚠️ API Quota Exceeded'}
+                  {apiKeyStatus.status === 'invalid' && '❌ API Key Invalid'}
+                  {apiKeyStatus.status === 'missing' && '❌ API Key Missing'}
+                  {apiKeyStatus.status === 'error' && '⚠️ API Key Error'}
+                </div>
+                {apiKeyStatus.masked_key && (
+                  <div className="status-details">
+                    <span className="masked-key-display">{apiKeyStatus.masked_key}</span>
+                    {apiKeyStatus.quota_info && (
+                      <>
+                        <span className="quota-separator">•</span>
+                        <span className="quota-display">
+                          {apiKeyStatus.quota_info.remaining_requests}/{apiKeyStatus.quota_info.max_requests_per_minute} requests
+                        </span>
+                        {apiKeyStatus.quota_info.reset_in_seconds > 0 && apiKeyStatus.status === 'quota_exceeded' && (
+                          <>
+                            <span className="quota-separator">•</span>
+                            <span className="quota-display">
+                              Reset in {Math.ceil(apiKeyStatus.quota_info.reset_in_seconds)}s
+                            </span>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -844,24 +989,33 @@ const VoiceInterface: React.FC = () => {
                 <input
                   type="password"
                   value={newApiKey}
-                  onChange={(e) => setNewApiKey(e.target.value)}
-                  placeholder="Enter new Gemini API key..."
-                  className="api-key-input"
-                  onKeyPress={(e) => e.key === 'Enter' && updateApiKey()}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
+                  placeholder="Enter new Gemini API key (minimum 20 characters)..."
+                  className={`api-key-input ${apiKeyValidation ? (apiKeyValidation.isValid ? 'valid' : 'invalid') : ''}`}
+                  onKeyPress={(e) => e.key === 'Enter' && apiKeyValidation?.isValid && updateApiKey()}
                 />
+                {apiKeyValidation && (
+                  <div className={`validation-message ${apiKeyValidation.isValid ? 'valid' : 'invalid'}`}>
+                    {apiKeyValidation.message}
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="modal-footer">
               <button
-                onClick={() => { setShowApiKeyModal(false); setNewApiKey(''); }}
+                onClick={() => { 
+                  setShowApiKeyModal(false); 
+                  setNewApiKey(''); 
+                  setApiKeyValidation(null);
+                }}
                 className="cancel-btn modal-btn"
               >
                 Cancel
               </button>
               <button
                 onClick={updateApiKey}
-                disabled={!newApiKey.trim() || isUpdatingApiKey}
+                disabled={!newApiKey.trim() || isUpdatingApiKey || !apiKeyValidation?.isValid}
                 className="approve-btn modal-btn primary"
               >
                 {isUpdatingApiKey ? '⏳ Updating...' : '✅ Update API Key'}
@@ -871,7 +1025,7 @@ const VoiceInterface: React.FC = () => {
         </div>
       )}
 
-      {/* GitHub Push Status Section */}
+      {/* GitHub Push Status Section */}      {/* GitHub Push Status Section */}
       {lastGithubPush && (
         <div className="github-push-status">
           <h3>🚀 Latest Push to TODO-UI Production</h3>
@@ -1123,6 +1277,14 @@ const VoiceInterface: React.FC = () => {
               className="voice-btn stop"
             >
               ⏹️ Stop
+            </button>
+
+            <button
+              onClick={() => fetchLogs()}
+              className="voice-btn logs"
+              title="View orchestrator logs"
+            >
+              📋 View Logs
             </button>
           </div>
         </div>
@@ -1418,6 +1580,52 @@ const VoiceInterface: React.FC = () => {
                   Close
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Logs Modal */}
+      {showLogsModal && (
+        <div className="modal-overlay">
+          <div className="modal logs-modal">
+            <div className="modal-header">
+              <h3>📋 Orchestrator Logs</h3>
+              <button onClick={() => setShowLogsModal(false)} className="close-btn">
+                ×
+              </button>
+            </div>
+
+            <div className="modal-content">
+              <div className="logs-container">
+                {isLoadingLogs ? (
+                  <div className="loading-logs">Loading logs...</div>
+                ) : recentLogs.length > 0 ? (
+                  <pre className="logs-content">
+                    {recentLogs.join('')}
+                  </pre>
+                ) : (
+                  <div className="no-logs">No logs available</div>
+                )}
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button onClick={() => fetchLogs()} className="refresh-btn modal-btn">
+                🔄 Refresh All Logs
+              </button>
+              <button onClick={() => fetchLogs('APPROVAL')} className="filter-btn modal-btn">
+                🔍 Filter: APPROVAL
+              </button>
+              <button onClick={() => fetchLogs('GITHUB')} className="filter-btn modal-btn">
+                🔍 Filter: GITHUB
+              </button>
+              <button onClick={() => fetchLogs('ERROR')} className="filter-btn modal-btn">
+                ❌ Filter: ERROR
+              </button>
+              <button onClick={() => setShowLogsModal(false)} className="cancel-btn modal-btn">
+                Close
+              </button>
             </div>
           </div>
         </div>

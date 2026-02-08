@@ -103,6 +103,217 @@ async def get_rate_limit_status():
         "message": f"Remaining requests: {status['remaining_requests']}/5 per minute"
     }
 
+@app.get("/api-key-status")
+async def get_api_key_status():
+    """Get Gemini API key status by testing it with the API."""
+    from tools.rate_limiter import get_gemini_api_status
+    import google.generativeai as genai
+    
+    logger.info("API key status requested")
+    logger.info(f"Current settings.gemini_api_key: {settings.gemini_api_key[:8] if settings.gemini_api_key else 'None'}...")
+    
+    # Check if API key is configured
+    if not settings.gemini_api_key:
+        logger.info("No API key configured")
+        return {
+            "status": "missing",
+            "configured": False,
+            "message": "No Gemini API key configured. Please add your API key.",
+            "quota_info": None
+        }
+    
+    # Mask the API key for display (show first 8 and last 4 characters)
+    key = settings.gemini_api_key
+    if len(key) > 12:
+        masked_key = f"{key[:8]}...{key[-4:]}"
+    else:
+        masked_key = f"{key[:4]}...{key[-2:]}"
+    
+    # Get rate limit status (local tracking)
+    quota_info = get_gemini_api_status()
+    
+    # Test the API key by making a simple API call
+    try:
+        genai.configure(api_key=settings.gemini_api_key)
+        
+        # Try to list models - this will fail if key is invalid
+        models = genai.list_models()
+        model_list = list(models)
+        
+        if model_list:
+            logger.info(f"API key is valid - found {len(model_list)} models")
+            logger.info(f"Returning masked key: {masked_key}")
+            
+            return {
+                "status": "active",
+                "configured": True,
+                "masked_key": masked_key,
+                "message": "API key is valid and working",
+                "quota_info": quota_info,
+                "models_available": len(model_list)
+            }
+        else:
+            logger.warning("API key validation returned no models")
+            return {
+                "status": "invalid",
+                "configured": True,
+                "masked_key": masked_key,
+                "message": "API key is configured but returned no models",
+                "quota_info": quota_info
+            }
+            
+    except Exception as e:
+        error_msg = str(e).lower()
+        logger.error(f"API key validation failed: {e}")
+        
+        # Check for specific error types
+        if "api key not valid" in error_msg or "invalid api key" in error_msg or "invalid_argument" in error_msg:
+            return {
+                "status": "invalid",
+                "configured": True,
+                "masked_key": masked_key,
+                "message": "API key is invalid. Please check your key.",
+                "quota_info": quota_info,
+                "error_details": str(e)
+            }
+        elif "quota" in error_msg or "resource_exhausted" in error_msg:
+            return {
+                "status": "quota_exceeded",
+                "configured": True,
+                "masked_key": masked_key,
+                "message": "API quota exceeded. Please wait or upgrade your plan.",
+                "quota_info": quota_info,
+                "error_details": str(e)
+            }
+        else:
+            return {
+                "status": "error",
+                "configured": True,
+                "masked_key": masked_key,
+                "message": f"Error validating API key: {str(e)}",
+                "quota_info": quota_info,
+                "error_details": str(e)
+            }
+
+@app.post("/update-api-key")
+async def update_api_key(request: dict):
+    """
+    Update the Gemini API key.
+    
+    Works in two modes:
+    1. Local development: Updates .env file
+    2. Production (Render): Updates in-memory only (requires restart with new env var)
+    """
+    import os
+    from pathlib import Path
+    
+    new_key = request.get("api_key", "").strip()
+    
+    if not new_key:
+        return {
+            "status": "error",
+            "message": "API key cannot be empty"
+        }
+    
+    # Validate API key format (basic check)
+    if len(new_key) < 20:
+        return {
+            "status": "error",
+            "message": "Invalid API key format. Key seems too short."
+        }
+    
+    # Mask the key for response
+    if len(new_key) > 12:
+        masked_key = f"{new_key[:8]}...{new_key[-4:]}"
+    else:
+        masked_key = f"{new_key[:4]}...{new_key[-2:]}"
+    
+    # Check if we're in production (Render) or local development
+    is_production = os.getenv("ENVIRONMENT") == "production" or os.getenv("RENDER") == "true"
+    
+    if is_production:
+        # Production mode: Update in-memory only
+        # Note: This will be lost on restart - user must update env var in Render dashboard
+        settings.gemini_api_key = new_key
+        
+        logger.info(f"API key updated in memory (production mode): {masked_key}")
+        
+        return {
+            "status": "success",
+            "message": "API key updated in memory. ⚠️ This change is temporary and will be lost on restart. Please update the GEMINI_API_KEY environment variable in your Render dashboard for permanent changes.",
+            "masked_key": masked_key,
+            "temporary": True,
+            "production_mode": True
+        }
+    else:
+        # Local development: Update .env file
+        try:
+            env_path = Path(__file__).parent.parent / ".env"
+            logger.info(f"Updating .env file at: {env_path}")
+            
+            # Read existing .env content
+            if env_path.exists():
+                with open(env_path, 'r') as f:
+                    lines = f.readlines()
+                logger.info(f"Read {len(lines)} lines from .env file")
+            else:
+                lines = []
+                logger.info(".env file does not exist, will create new one")
+            
+            # Update or add GEMINI_API_KEY
+            key_found = False
+            for i, line in enumerate(lines):
+                if line.strip().startswith("GEMINI_API_KEY="):
+                    lines[i] = f"GEMINI_API_KEY={new_key}\n"
+                    key_found = True
+                    logger.info(f"Updated existing key at line {i+1}")
+                    break
+            
+            if not key_found:
+                lines.append(f"\nGEMINI_API_KEY={new_key}\n")
+                logger.info("Added new GEMINI_API_KEY line")
+            
+            # Write back to .env
+            with open(env_path, 'w') as f:
+                f.writelines(lines)
+            logger.info(f"Wrote {len(lines)} lines to .env file")
+            
+            # Update settings in memory
+            old_key = settings.gemini_api_key
+            settings.gemini_api_key = new_key
+            logger.info(f"Updated settings.gemini_api_key in memory")
+            logger.info(f"Old key (masked): {old_key[:8] if old_key else 'None'}...")
+            logger.info(f"New key (masked): {masked_key}")
+            
+            # Verify the update
+            if settings.gemini_api_key == new_key:
+                logger.info("✅ Verification: settings.gemini_api_key matches new key")
+            else:
+                logger.error(f"❌ Verification failed: settings.gemini_api_key = {settings.gemini_api_key[:8] if settings.gemini_api_key else 'None'}...")
+            
+            return {
+                "status": "success",
+                "message": "API key updated successfully in .env file",
+                "masked_key": masked_key,
+                "temporary": False,
+                "production_mode": False
+            }
+            
+        except Exception as e:
+            logger.error(f"Error updating API key in .env: {e}")
+            logger.exception("Full traceback:")
+            
+            # Fallback: Update in memory only
+            settings.gemini_api_key = new_key
+            
+            return {
+                "status": "warning",
+                "message": f"API key updated in memory only. Could not write to .env file: {str(e)}",
+                "masked_key": masked_key,
+                "temporary": True,
+                "production_mode": False
+            }
+
 @app.get("/ui-status")
 async def get_ui_status():
     """Get UI file watcher status and recent changes."""
@@ -1178,6 +1389,51 @@ async def get_last_commit():
             "error": str(e)
         }
 
+@app.get("/logs")
+async def get_logs(lines: int = 100, filter: str = None):
+    """
+    Get recent orchestrator logs.
+    
+    Args:
+        lines: Number of log lines to return (default: 100)
+        filter: Optional filter string (e.g., "APPROVAL", "GITHUB", "ERROR")
+    """
+    try:
+        import os
+        from pathlib import Path
+        
+        # Get log file path
+        log_file = Path(__file__).parent.parent / "orchestrator.log"
+        
+        if not log_file.exists():
+            return {
+                "status": "success",
+                "logs": [],
+                "message": "Log file not found"
+            }
+        
+        # Read last N lines
+        with open(log_file, 'r') as f:
+            all_lines = f.readlines()
+            recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        
+        # Apply filter if provided
+        if filter:
+            recent_lines = [line for line in recent_lines if filter.upper() in line.upper()]
+        
+        return {
+            "status": "success",
+            "logs": recent_lines,
+            "total_lines": len(recent_lines),
+            "filter": filter
+        }
+    except Exception as e:
+        logger.error(f"Error reading logs: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
 @app.post("/rollback-commit/{task_id}")
 async def rollback_task_commit(task_id: str, hard_rollback: bool = False):
     """
@@ -1436,48 +1692,65 @@ async def approve_task_commit(task_id: str):
         # Push to GitHub if not already pushed
         github_push_result = None
         if not task.get("github_pushed"):
-            logger.info(f"Pushing approved commit to GitHub for task {task_id}")
+            logger.info(f"[APPROVAL] Pushing approved commit to GitHub for task {task_id}")
             try:
                 # Sync the TODO-UI repository first
+                logger.info(f"[APPROVAL] Step 1: Cloning/pulling TODO-UI repository")
                 sync_result = github_ops.clone_or_pull_repo()
+                logger.info(f"[APPROVAL] Sync result: {sync_result}")
+                
                 if sync_result["status"] == "success":
                     # Get task details for GitHub push
                     modified_files = task.get("modified_files", [])
+                    logger.info(f"[APPROVAL] Step 2: Syncing {len(modified_files)} modified files to GitHub repo")
+                    logger.info(f"[APPROVAL] Modified files: {modified_files}")
                     
                     # Sync files from orchestrator/todo-ui to the GitHub repo
                     from pathlib import Path
                     source_base = Path("todo-ui")  # orchestrator/todo-ui
                     file_sync_result = github_ops.sync_files_to_repo(modified_files, source_base)
+                    logger.info(f"[APPROVAL] File sync result: {file_sync_result}")
                     
                     if file_sync_result["status"] != "success":
-                        logger.error(f"Failed to sync files to GitHub repo: {file_sync_result.get('error', 'Unknown error')}")
-                        github_push_result = {"status": "error", "error": f"File sync failed: {file_sync_result.get('error', 'Unknown error')}"}
+                        error_msg = f"File sync failed: {file_sync_result.get('error', 'Unknown error')}"
+                        logger.error(f"[APPROVAL] {error_msg}")
+                        logger.error(f"[APPROVAL] Failed files: {file_sync_result.get('failed_files', [])}")
+                        github_push_result = {"status": "error", "error": error_msg}
                     else:
-                        logger.info(f"Successfully synced {file_sync_result['total_synced']} files to GitHub repo")
+                        logger.info(f"[APPROVAL] Successfully synced {file_sync_result['total_synced']} files to GitHub repo")
+                        logger.info(f"[APPROVAL] Synced files: {file_sync_result.get('synced_files', [])}")
                         
                         # Push the approved commit to GitHub
+                        logger.info(f"[APPROVAL] Step 3: Committing and pushing changes to GitHub")
                         github_push_result = github_ops.commit_and_push_changes(
                             task.get("title", f"Approved task {task_id}"),
                             modified_files,
                             {"suggestions": task.get("gemini_analysis", {"summary": "Approved commit", "risk_assessment": "low"})}
                         )
+                        logger.info(f"[APPROVAL] GitHub push result: {github_push_result}")
                         
                         if github_push_result["status"] == "success":
-                            logger.info(f"Successfully pushed approved commit to GitHub: {github_push_result['commit_hash']}")
+                            logger.info(f"[APPROVAL] ✅ Successfully pushed approved commit to GitHub: {github_push_result['commit_hash']}")
                             task["github_pushed"] = True
                             task["github_commit_info"] = {
                                 "commit_hash": github_push_result["commit_hash"],
                                 "commit_message": github_push_result["commit_message"],
                                 "timestamp": github_push_result["timestamp"],
-                                "pushed_at": "2024-01-23T" + str(len(completed_tasks) + 35).zfill(2) + ":00:00Z"
+                                "pushed_at": datetime.now().isoformat()
                             }
                         else:
-                            logger.error(f"Failed to push approved commit to GitHub: {github_push_result.get('error', 'Unknown error')}")
+                            error_msg = github_push_result.get('error', 'Unknown error')
+                            logger.error(f"[APPROVAL] ❌ Failed to push approved commit to GitHub: {error_msg}")
+                            if github_push_result.get('committed'):
+                                logger.warning(f"[APPROVAL] Changes were committed locally but not pushed")
                 else:
-                    logger.error(f"Failed to sync TODO-UI repo for approval push: {sync_result.get('error', 'Unknown error')}")
+                    error_msg = f"Failed to sync TODO-UI repo: {sync_result.get('error', 'Unknown error')}"
+                    logger.error(f"[APPROVAL] {error_msg}")
+                    github_push_result = {"status": "error", "error": error_msg}
             except Exception as e:
-                logger.error(f"Error pushing approved commit to GitHub: {str(e)}")
-                github_push_result = {"status": "error", "error": str(e)}
+                error_msg = f"Exception during GitHub push: {str(e)}"
+                logger.error(f"[APPROVAL] {error_msg}", exc_info=True)
+                github_push_result = {"status": "error", "error": error_msg}
         
         # Mark task as approved
         task["status"] = "approved"
@@ -1529,13 +1802,18 @@ async def approve_task_commit(task_id: str):
             except Exception as e:
                 logger.warning(f"Failed to send approval notification to WebSocket client: {e}")
         
-        return {
+        response_data = {
             "status": "success",
             "task_id": task_id,
             "commit_hash": task["commit_info"]["commit_hash"],
             "message": f"Task {task_id} commit approved and finalized",
-            "task_status": "approved"
+            "task_status": "approved",
+            "github_pushed": task.get("github_pushed", False),
+            "github_commit_info": task.get("github_commit_info")
         }
+        
+        logger.info(f"[APPROVAL] Returning response: {response_data}")
+        return response_data
         
     except Exception as e:
         logger.error(f"Error approving task {task_id}: {str(e)}")

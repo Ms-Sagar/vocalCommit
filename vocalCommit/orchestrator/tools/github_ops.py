@@ -288,39 +288,55 @@ class GitHubOperations:
                                gemini_suggestions: Dict[str, Any]) -> Dict[str, Any]:
         """Commit changes and push to GitHub with Gemini analysis. Always pulls latest changes first."""
         try:
+            logger.info(f"[GITHUB] Starting commit and push for: {task_description}")
+            logger.info(f"[GITHUB] Working directory: {self.local_path}")
+            logger.info(f"[GITHUB] Modified files count: {len(modified_files)}")
+            
             # CRITICAL: Configure git pull strategy first
-            logger.info("Configuring git pull strategy")
-            self._run_git_command(["config", "pull.rebase", "false"])
+            logger.info("[GITHUB] Step 1: Configuring git pull strategy")
+            config_result = self._run_git_command(["config", "pull.rebase", "false"])
+            logger.info(f"[GITHUB] Config result: {config_result}")
             
             # CRITICAL: Always pull latest changes before committing
-            logger.info("Pulling latest changes from TODO-UI repository before committing")
+            logger.info("[GITHUB] Step 2: Pulling latest changes from TODO-UI repository")
             pull_result = self._run_git_command(["pull", "origin", "main", "--no-edit"])
+            logger.info(f"[GITHUB] Pull result (main): {pull_result}")
             
             if pull_result["status"] != "success":
                 # Try master branch if main fails
+                logger.info("[GITHUB] Main branch failed, trying master branch")
                 pull_result = self._run_git_command(["pull", "origin", "master", "--no-edit"])
+                logger.info(f"[GITHUB] Pull result (master): {pull_result}")
             
             if pull_result["status"] != "success":
-                logger.warning(f"Failed to pull latest changes: {pull_result.get('stderr', 'Unknown error')}")
+                logger.warning(f"[GITHUB] Failed to pull latest changes: {pull_result.get('stderr', 'Unknown error')}")
                 # Continue anyway, but log the warning
             else:
-                logger.info("Successfully pulled latest changes from TODO-UI repository")
+                logger.info("[GITHUB] ✅ Successfully pulled latest changes from TODO-UI repository")
             
             # Check if there are any changes to commit
+            logger.info("[GITHUB] Step 3: Checking for changes to commit")
             status_result = self._run_git_command(["status", "--porcelain"])
+            logger.info(f"[GITHUB] Status output: {status_result.get('stdout', '(empty)')}")
             
             if not status_result["stdout"]:
+                logger.warning("[GITHUB] No changes to commit")
                 return {
                     "status": "no_changes",
                     "message": "No changes to commit"
                 }
             
             # Add all changes
+            logger.info("[GITHUB] Step 4: Staging all changes")
             add_result = self._run_git_command(["add", "."])
+            logger.info(f"[GITHUB] Add result: {add_result}")
+            
             if add_result["status"] != "success":
+                error_msg = f"Failed to stage changes: {add_result.get('stderr', 'Unknown error')}"
+                logger.error(f"[GITHUB] {error_msg}")
                 return {
                     "status": "error",
-                    "error": f"Failed to stage changes: {add_result.get('stderr', 'Unknown error')}"
+                    "error": error_msg
                 }
             
             # Create commit message with Gemini analysis
@@ -343,32 +359,44 @@ class GitHubOperations:
             if len(modified_files) > 10:
                 commit_message += f"... and {len(modified_files) - 10} more files\n"
             
+            logger.info(f"[GITHUB] Step 5: Committing changes with message: {commit_message[:100]}...")
+            
             # Commit changes
             commit_result = self._run_git_command(["commit", "-m", commit_message])
+            logger.info(f"[GITHUB] Commit result: {commit_result}")
             
             if commit_result["status"] != "success":
+                error_msg = f"Failed to commit changes: {commit_result.get('stderr', 'Unknown error')}"
+                logger.error(f"[GITHUB] {error_msg}")
                 return {
                     "status": "error",
-                    "error": f"Failed to commit changes: {commit_result.get('stderr', 'Unknown error')}"
+                    "error": error_msg
                 }
             
             # Get commit hash
+            logger.info("[GITHUB] Step 6: Getting commit hash")
             hash_result = self._run_git_command(["rev-parse", "HEAD"])
             commit_hash = hash_result["stdout"][:8] if hash_result["status"] == "success" else "unknown"
+            logger.info(f"[GITHUB] Commit hash: {commit_hash}")
             
             # Push to origin
+            logger.info("[GITHUB] Step 7: Pushing to remote repository")
             push_result = self._run_git_command(["push", "origin", "HEAD"])
+            logger.info(f"[GITHUB] Push result: {push_result}")
             
             if push_result["status"] != "success":
+                error_msg = f"Failed to push changes: {push_result.get('stderr', 'Unknown error')}"
+                logger.error(f"[GITHUB] {error_msg}")
+                logger.error(f"[GITHUB] Changes were committed locally but not pushed to remote")
                 return {
                     "status": "error",
-                    "error": f"Failed to push changes: {push_result.get('stderr', 'Unknown error')}",
+                    "error": error_msg,
                     "commit_hash": commit_hash,
                     "committed": True,
                     "pushed": False
                 }
             
-            logger.info(f"Successfully committed and pushed changes to TODO-UI: {commit_hash}")
+            logger.info(f"[GITHUB] ✅ Successfully committed and pushed changes to TODO-UI: {commit_hash}")
             
             return {
                 "status": "success",

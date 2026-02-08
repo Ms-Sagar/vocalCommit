@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     todo_ui_repo_url: str = Field("https://github.com/Ms-Sagar/TODO-UI.git", validation_alias="TODO_UI_REPO_URL")
     todo_ui_local_path: str = Field("todo-ui", validation_alias="TODO_UI_LOCAL_PATH")
     
-    model_config = {"env_file": Path(__file__).parent.parent / ".env", "extra": "ignore"}
+    model_config = {
+        "env_file": Path(__file__).parent.parent / ".env",
+        "extra": "ignore",
+        "validate_assignment": True  # Allow field updates after initialization
+    }
 
 settings = Settings()
