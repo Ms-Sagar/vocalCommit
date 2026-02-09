@@ -459,17 +459,10 @@ const VoiceInterface: React.FC = () => {
       recognition.onresult = (event) => {
         const result = event.results[0][0].transcript;
         setTranscript(result);
-
-        // Send to VocalCommit orchestrator
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          const message: VoiceMessage = {
-            type: 'voice_command',
-            transcript: result,
-            timestamp: new Date().toISOString()
-          };
-
-          wsRef.current.send(JSON.stringify(message));
-        }
+        
+        // Voice recognition only populates the input field
+        // User must click submit button to send the command
+        // This prevents duplicate requests from voice + text
       };
 
       recognition.onerror = (event) => {
@@ -578,6 +571,7 @@ const VoiceInterface: React.FC = () => {
 
   const sendTextCommand = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && transcript.trim()) {
+      // Send command to backend (works for both voice-populated and manually-typed text)
       const message: VoiceMessage = {
         type: 'text_command',
         transcript: transcript.trim(),

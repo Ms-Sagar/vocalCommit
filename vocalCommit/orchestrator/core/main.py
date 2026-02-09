@@ -675,11 +675,24 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
                 "task_id": task_id
             }
         
-        # SIMPLE RULE: Only allow ONE active workflow at a time
-        # This prevents race conditions and makes the system more predictable
+        # CRITICAL: Check if ANY workflow is active FIRST (before checking specific task_id)
+        # This prevents race conditions where similar commands come in rapid succession
         if len(workflow_states["active"]) > 0:
             active_task_id = list(workflow_states["active"].keys())[0]
             active_task = workflow_states["active"][active_task_id]
+            
+            # If it's the exact same task_id, it's a true duplicate
+            if task_id == active_task_id:
+                logger.warning(f"Duplicate request detected for task {task_id} - ignoring")
+                return {
+                    "status": "duplicate",
+                    "agent": "System",
+                    "response": f"⚠️ **Duplicate Request**\n\nThis exact command is already being processed.\n\n**Task ID**: {task_id}\n\n💡 **Tip**: Please wait for the current task to complete.",
+                    "transcript": transcript,
+                    "task_id": task_id
+                }
+            
+            # Otherwise, block because another workflow is in progress
             logger.warning(f"Workflow already in progress - blocking new command. Active task: {active_task_id}")
             return {
                 "status": "busy",
