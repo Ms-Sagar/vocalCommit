@@ -670,7 +670,8 @@ const VoiceInterface: React.FC = () => {
       setCommitActions(prev => ({ ...prev, [taskId]: true }));
       console.log(`[Approval] Starting approval for task: ${taskId}`);
 
-      const response = await fetch(`${API_BASE_URL}/approve-commit/${taskId}`, {
+      // Use the new approve-github-push endpoint that just pushes existing commit
+      const response = await fetch(`${API_BASE_URL}/approve-github-push/${taskId}`, {
         method: 'POST'
       });
 
@@ -683,21 +684,13 @@ const VoiceInterface: React.FC = () => {
 
       if (result.status === 'success') {
         // Build detailed success message with GitHub status
-        let successMessage = `✅ **Commit Approved**\n\nTask "${completedTasks[taskId]?.transcript}" has been approved.\n\n🔗 **Commit**: ${result.commit_hash}\n\n🔒 **Status**: Changes are now final (rollback no longer available)`;
-        
-        // Add GitHub push status
-        if (result.github_pushed || result.github_commit_info) {
-          const githubHash = result.github_commit_info?.commit_hash || result.commit_hash;
-          successMessage += `\n\n🚀 **GitHub**: Successfully pushed to TODO-UI repo (${githubHash.substring(0, 8)})`;
-        } else {
-          successMessage += `\n\n⚠️ **GitHub**: Not pushed to remote (check logs for details)`;
-        }
+        let successMessage = `✅ **Pushed to GitHub**\n\nTask "${completedTasks[taskId]?.transcript}" has been pushed to production.\n\n🔗 **Commit**: ${result.commit_hash}\n\n🚀 **Status**: Live in TODO-UI repository`;
 
         setMessages(prev => [...prev, {
           status: 'success',
           agent: 'Git System',
           response: successMessage,
-          transcript: `Approve commit for ${taskId}`
+          transcript: `Push commit for ${taskId}`
         }]);
 
         // Remove from completed tasks and close modal immediately
