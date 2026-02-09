@@ -350,13 +350,18 @@ class PMAgent:
                 # Import the sanitize function
                 from agents.dev_agent.dev_logic import sanitize_filename
                 sanitized = sanitize_filename(file)
-                target_files.add(sanitized)
+                # Normalize paths - remove redundant src/ prefix if file already starts with src/
+                if sanitized.startswith('src/'):
+                    target_files.add(sanitized)
+                else:
+                    # Add src/ prefix for component files
+                    target_files.add(f"src/{sanitized}" if '/' in sanitized or sanitized.endswith(('.tsx', '.ts', '.css')) else sanitized)
         
         # Analyze transcript for file requirements
         transcript_lower = transcript.lower()
         
-        # Always include App.tsx for UI changes
-        target_files.add("App.tsx")
+        # Always include App.tsx for UI changes (with src/ prefix to match AI suggestions)
+        target_files.add("src/App.tsx")
         
         # Determine if CSS changes are needed
         css_keywords = [
@@ -367,7 +372,7 @@ class PMAgent:
         ]
         
         if any(keyword in transcript_lower for keyword in css_keywords):
-            target_files.add("App.css")
+            target_files.add("src/App.css")
         
         # Determine if global styles are needed
         global_keywords = [
@@ -376,7 +381,7 @@ class PMAgent:
         ]
         
         if any(keyword in transcript_lower for keyword in global_keywords):
-            target_files.add("index.css")
+            target_files.add("src/index.css")
         
         # Determine if new components are needed
         component_keywords = [
@@ -398,29 +403,49 @@ class PMAgent:
                 match = re.search(pattern, transcript_lower)
                 if match:
                     component_name = match.group(1).capitalize()
-                    target_files.add(f"components/{component_name}.tsx")
-                    target_files.add(f"components/{component_name}.css")
+                    target_files.add(f"src/components/{component_name}.tsx")
+                    target_files.add(f"src/components/{component_name}.css")
                     break
         
         # Specific feature-based file determination
         if 'dark mode' in transcript_lower or 'theme' in transcript_lower:
-            target_files.update(["App.tsx", "App.css"])
+            target_files.update(["src/App.tsx", "src/App.css"])
             # Add theme-related files
             if 'context' in transcript_lower or 'provider' in transcript_lower:
-                target_files.add("context/ThemeContext.tsx")
+                target_files.add("src/context/ThemeContext.tsx")
             if 'hook' in transcript_lower:
-                target_files.add("hooks/useTheme.ts")
+                target_files.add("src/hooks/useTheme.ts")
         
         if 'modal' in transcript_lower or 'popup' in transcript_lower:
-            target_files.update(["App.tsx", "App.css"])
+            target_files.update(["src/App.tsx", "src/App.css"])
         
         if 'navigation' in transcript_lower or 'header' in transcript_lower or 'footer' in transcript_lower:
-            target_files.update(["App.tsx", "App.css"])
+            target_files.update(["src/App.tsx", "src/App.css"])
         
-        # Convert back to list and ensure we have at least one file
+        # Convert back to list, deduplicate, and ensure we have at least one file
         result = list(target_files)
+        
+        # Final deduplication: remove files that are duplicates with/without src/ prefix
+        # Keep only the src/ prefixed versions
+        deduplicated = set()
+        files_without_src = set()
+        
+        for file in result:
+            if file.startswith('src/'):
+                deduplicated.add(file)
+                # Track the non-src version to remove it if it exists
+                files_without_src.add(file[4:])  # Remove 'src/' prefix
+            else:
+                # Only add if we haven't seen the src/ version
+                if file not in files_without_src:
+                    deduplicated.add(file)
+        
+        result = sorted(list(deduplicated))  # Sort for consistency
+        
         if not result and is_ui_editing:
-            result = ["App.tsx"]
+            result = ["src/App.tsx"]
+        
+        logger.info(f"PM Agent determined {len(result)} unique target files: {result}")
         
         return result
     

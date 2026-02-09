@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import logging
+from datetime import datetime
 from .config import settings
 
 # Import agents
@@ -1733,10 +1734,24 @@ async def approve_github_push(task_id: str):
         # Update task status
         task["awaiting_push_approval"] = False
         task["github_pushed"] = True
+        task["status"] = "pushed_to_production"  # Mark as finalized
         task["commit_info"]["status"] = "pushed_to_remote"
         task["commit_info"]["pushed_at"] = datetime.now().isoformat()
         
-        logger.info(f"[APPROVAL] ✅ Task {task_id} successfully pushed to GitHub: {push_result['commit_hash']}")
+        # Move to approved/finalized state
+        workflow_states["approved"] = workflow_states.get("approved", {})
+        workflow_states["approved"][task_id] = {
+            "transcript": task["title"],
+            "status": "pushed_to_production",
+            "pushed_at": task["commit_info"]["pushed_at"],
+            "commit_hash": push_result["commit_hash"]
+        }
+        
+        # Remove from completed state (now it's pushed to production)
+        if task_id in workflow_states["completed"]:
+            del workflow_states["completed"][task_id]
+        
+        logger.info(f"[APPROVAL] ✅ Task {task_id} successfully pushed to GitHub and moved to approved state: {push_result['commit_hash']}")
         
         # Send GitHub push notification via WebSocket
         push_message = {
