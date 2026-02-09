@@ -675,7 +675,21 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
                 "task_id": task_id
             }
         
-        # Check if there's already a pending workflow for this command
+        # SIMPLE RULE: Only allow ONE active workflow at a time
+        # This prevents race conditions and makes the system more predictable
+        if len(workflow_states["active"]) > 0:
+            active_task_id = list(workflow_states["active"].keys())[0]
+            active_task = workflow_states["active"][active_task_id]
+            logger.warning(f"Workflow already in progress - blocking new command. Active task: {active_task_id}")
+            return {
+                "status": "busy",
+                "agent": "System",
+                "response": f"⏳ **System Busy**\n\nAnother workflow is currently being processed.\n\n**Active Task**: {active_task.get('transcript', 'Unknown')}\n**Status**: {active_task.get('current_step', 'Processing')}\n\n💡 **Tip**: Please wait for the current workflow to complete before submitting a new command.",
+                "transcript": transcript,
+                "active_task_id": active_task_id
+            }
+        
+        # Check if there's already a pending workflow (for approval-based workflows)
         if task_id in pending_approvals:
             return {
                 "status": "duplicate",
@@ -687,6 +701,16 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         
         # Show immediate processing status
         logger.info(f"Processing command: {transcript}")
+        
+        # CRITICAL: Add to active state IMMEDIATELY to prevent race conditions
+        # This must happen BEFORE any async operations (PM Agent, etc.)
+        workflow_states["active"][task_id] = {
+            "transcript": transcript,
+            "status": "planning",
+            "started_at": "2024-01-23T10:00:00Z",
+            "current_step": "pm_agent"
+        }
+        logger.info(f"Added task {task_id} to active state to prevent duplicates")
         
         # Check rate limit status before calling PM Agent
         from tools.rate_limiter import get_gemini_api_status
@@ -706,6 +730,10 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         pm_result = await pm_agent.plan_task(transcript, is_ui_editing=True)
         
         if pm_result["status"] != "success":
+            # Remove from active state on failure
+            if task_id in workflow_states["active"]:
+                del workflow_states["active"][task_id]
+            
             # Check if it's a rate limit error
             if pm_result.get("error") == "api_rate_limit":
                 return {
@@ -740,14 +768,12 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         # Step 2: Execute Dev Agent directly (no approval needed)
         logger.info(f"Starting direct execution of Dev Agent for task: {task_id}")
         
-        # Move directly to active state
-        workflow_states["active"][task_id] = {
-            "transcript": transcript,
+        # Update active state with plan details
+        workflow_states["active"][task_id].update({
             "plan": plan,
             "status": "in_progress",
-            "started_at": "2024-01-23T10:00:00Z",
             "current_step": "dev_agent"
-        }
+        })
         
         # Create thought signature for PM Agent
         thought_manager.add_thought(task_id, "PM Agent", {
@@ -788,6 +814,11 @@ async def process_voice_command(command_type: str, transcript: str) -> dict:
         
     except Exception as e:
         logger.error(f"Error processing command: {str(e)}")
+        
+        # Remove from active state on exception
+        if task_id in workflow_states["active"]:
+            del workflow_states["active"][task_id]
+        
         return {
             "status": "error",
             "agent": "Orchestrator",
