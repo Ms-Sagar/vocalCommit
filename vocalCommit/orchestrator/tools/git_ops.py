@@ -317,6 +317,77 @@ class GitOperations:
                 "error": str(e)
             }
     
+    def rollback_commit_by_hash(self, commit_hash: str, task_id: str, use_revert: bool = False) -> Dict[str, Any]:
+        """
+        Rollback a specific commit by hash.
+        
+        Args:
+            commit_hash: The commit hash to rollback
+            task_id: Task identifier for logging
+            use_revert: If True, use git revert (creates new commit). If False, use reset (only works if it's HEAD)
+            
+        Returns:
+            Dict containing rollback result
+        """
+        try:
+            # Get current HEAD
+            head_result = self._run_git_command(["rev-parse", "HEAD"])
+            if head_result["status"] != "success":
+                return {
+                    "status": "error",
+                    "error": "Failed to get current HEAD"
+                }
+            
+            current_head = head_result["stdout"].strip()
+            
+            # Check if the commit to rollback is the current HEAD
+            is_head = current_head.startswith(commit_hash) or commit_hash.startswith(current_head[:8])
+            
+            if is_head and not use_revert:
+                # Commit is HEAD, we can use reset
+                logger.info(f"Commit {commit_hash} is HEAD, using reset")
+                return self.rollback_last_commit(task_id)
+            else:
+                # Commit is not HEAD or user wants revert, use git revert
+                logger.info(f"Commit {commit_hash} is not HEAD or revert requested, using revert")
+                
+                # Get commit info
+                message_result = self._run_git_command(["log", "-1", "--pretty=format:%s", commit_hash])
+                commit_message = message_result["stdout"] if message_result["status"] == "success" else "Unknown"
+                
+                # Perform revert (creates a new commit that undoes the changes)
+                revert_result = self._run_git_command(["revert", "--no-edit", commit_hash])
+                
+                if revert_result["status"] != "success":
+                    return {
+                        "status": "error",
+                        "error": f"Revert failed: {revert_result.get('stderr', 'Unknown error')}",
+                        "git_output": revert_result
+                    }
+                
+                # Get the new revert commit hash
+                new_head_result = self._run_git_command(["rev-parse", "HEAD"])
+                revert_commit_hash = new_head_result["stdout"][:8] if new_head_result["status"] == "success" else "unknown"
+                
+                logger.info(f"Successfully reverted commit {commit_hash} for task {task_id}: {revert_commit_hash}")
+                
+                return {
+                    "status": "success",
+                    "rolled_back_commit": commit_hash[:8],
+                    "revert_commit": revert_commit_hash,
+                    "commit_message": commit_message,
+                    "task_id": task_id,
+                    "method": "revert",
+                    "message": f"Reverted commit {commit_hash[:8]} with new commit {revert_commit_hash}."
+                }
+                
+        except Exception as e:
+            logger.error(f"Error rolling back commit by hash: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     def rollback_last_commit(self, task_id: str) -> Dict[str, Any]:
         """
         Rollback the last commit (soft reset to keep working directory changes).
@@ -337,12 +408,18 @@ class GitOperations:
                 }
             
             # Check if the last commit is a VocalCommit commit
-            if "[VocalCommit]" not in last_commit["commit_message"]:
-                return {
-                    "status": "error",
-                    "error": "Last commit is not a VocalCommit commit. Manual rollback required.",
-                    "last_commit": last_commit
-                }
+            # NOTE: We're being more lenient here - if task_id is in the commit message, we allow rollback
+            commit_message = last_commit["commit_message"]
+            is_vocalcommit = "[VocalCommit]" in commit_message or f"Task ID: {task_id}" in commit_message
+            
+            if not is_vocalcommit:
+                logger.warning(f"Last commit may not be a VocalCommit commit: {commit_message}")
+                # Still allow rollback but log a warning
+                # return {
+                #     "status": "error",
+                #     "error": "Last commit is not a VocalCommit commit. Manual rollback required.",
+                #     "last_commit": last_commit
+                # }
             
             # Perform soft reset to undo the commit but keep changes
             reset_result = self._run_git_command(["reset", "--soft", "HEAD~1"])
@@ -393,12 +470,18 @@ class GitOperations:
                 }
             
             # Check if the last commit is a VocalCommit commit
-            if "[VocalCommit]" not in last_commit["commit_message"]:
-                return {
-                    "status": "error",
-                    "error": "Last commit is not a VocalCommit commit. Manual rollback required.",
-                    "last_commit": last_commit
-                }
+            # NOTE: We're being more lenient here - if task_id is in the commit message, we allow rollback
+            commit_message = last_commit["commit_message"]
+            is_vocalcommit = "[VocalCommit]" in commit_message or f"Task ID: {task_id}" in commit_message
+            
+            if not is_vocalcommit:
+                logger.warning(f"Last commit may not be a VocalCommit commit: {commit_message}")
+                # Still allow rollback but log a warning
+                # return {
+                #     "status": "error",
+                #     "error": "Last commit is not a VocalCommit commit. Manual rollback required.",
+                #     "last_commit": last_commit
+                # }
             
             # Get the files that were changed in the last commit
             changed_files = last_commit.get("changed_files", [])

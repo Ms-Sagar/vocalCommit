@@ -1557,17 +1557,28 @@ async def rollback_task_commit(task_id: str, hard_rollback: bool = False):
             }
         
         task = completed_tasks[task_id]
-        if not task.get("commit_info", {}).get("commit_hash"):
+        commit_info = task.get("commit_info", {})
+        commit_hash = commit_info.get("commit_hash")
+        
+        if not commit_hash:
             return {
                 "status": "error",
                 "error": f"Task {task_id} has no associated commit to rollback"
             }
         
-        # Perform rollback
+        # Perform rollback using the specific commit hash
+        logger.info(f"Rolling back commit {commit_hash} for task {task_id} (hard={hard_rollback})")
+        
         if hard_rollback:
-            rollback_result = git_ops.hard_rollback_last_commit(task_id)
+            # For hard rollback, we need to check if it's HEAD first
+            rollback_result = git_ops.rollback_commit_by_hash(commit_hash, task_id, use_revert=False)
+            if rollback_result["status"] != "success":
+                # If reset failed (not HEAD), try revert
+                logger.warning(f"Reset failed, trying revert for hard rollback")
+                rollback_result = git_ops.rollback_commit_by_hash(commit_hash, task_id, use_revert=True)
         else:
-            rollback_result = git_ops.rollback_last_commit(task_id)
+            # Soft rollback - use commit hash
+            rollback_result = git_ops.rollback_commit_by_hash(commit_hash, task_id, use_revert=False)
         
         if rollback_result["status"] != "success":
             return rollback_result
