@@ -1790,59 +1790,82 @@ async def approve_task_commit(task_id: str):
         if not task.get("github_pushed"):
             logger.info(f"[APPROVAL] Pushing approved commit to GitHub for task {task_id}")
             try:
-                # Sync the TODO-UI repository first
-                logger.info(f"[APPROVAL] Step 1: Cloning/pulling TODO-UI repository")
-                sync_result = github_ops.clone_or_pull_repo()
-                logger.info(f"[APPROVAL] Sync result: {sync_result}")
-                
-                if sync_result["status"] == "success":
-                    # Get task details for GitHub push
-                    modified_files = task.get("modified_files", [])
-                    logger.info(f"[APPROVAL] Step 2: Syncing {len(modified_files)} modified files to GitHub repo")
-                    logger.info(f"[APPROVAL] Modified files: {modified_files}")
+                # Check if this task is awaiting push approval (already committed locally)
+                if task.get("awaiting_push_approval"):
+                    logger.info(f"[APPROVAL] Task {task_id} already committed locally, just pushing to remote")
                     
-                    # Sync files from orchestrator/todo-ui to the GitHub repo
-                    from pathlib import Path
-                    source_base = Path("todo-ui")  # orchestrator/todo-ui
-                    file_sync_result = github_ops.sync_files_to_repo(modified_files, source_base)
-                    logger.info(f"[APPROVAL] File sync result: {file_sync_result}")
+                    # Just push the existing commit
+                    github_push_result = github_ops.push_committed_changes()
+                    logger.info(f"[APPROVAL] Push result: {github_push_result}")
                     
-                    if file_sync_result["status"] != "success":
-                        error_msg = f"File sync failed: {file_sync_result.get('error', 'Unknown error')}"
-                        logger.error(f"[APPROVAL] {error_msg}")
-                        logger.error(f"[APPROVAL] Failed files: {file_sync_result.get('failed_files', [])}")
-                        github_push_result = {"status": "error", "error": error_msg}
+                    if github_push_result["status"] == "success":
+                        logger.info(f"[APPROVAL] ✅ Successfully pushed existing commit to GitHub: {github_push_result['commit_hash']}")
+                        task["github_pushed"] = True
+                        task["awaiting_push_approval"] = False
+                        task["github_commit_info"] = {
+                            "commit_hash": github_push_result["commit_hash"],
+                            "pushed_at": datetime.now().isoformat()
+                        }
                     else:
-                        logger.info(f"[APPROVAL] Successfully synced {file_sync_result['total_synced']} files to GitHub repo")
-                        logger.info(f"[APPROVAL] Synced files: {file_sync_result.get('synced_files', [])}")
-                        
-                        # Push the approved commit to GitHub
-                        logger.info(f"[APPROVAL] Step 3: Committing and pushing changes to GitHub")
-                        github_push_result = github_ops.commit_and_push_changes(
-                            task.get("title", f"Approved task {task_id}"),
-                            modified_files,
-                            {"suggestions": task.get("gemini_analysis", {"summary": "Approved commit", "risk_assessment": "low"})}
-                        )
-                        logger.info(f"[APPROVAL] GitHub push result: {github_push_result}")
-                        
-                        if github_push_result["status"] == "success":
-                            logger.info(f"[APPROVAL] ✅ Successfully pushed approved commit to GitHub: {github_push_result['commit_hash']}")
-                            task["github_pushed"] = True
-                            task["github_commit_info"] = {
-                                "commit_hash": github_push_result["commit_hash"],
-                                "commit_message": github_push_result["commit_message"],
-                                "timestamp": github_push_result["timestamp"],
-                                "pushed_at": datetime.now().isoformat()
-                            }
-                        else:
-                            error_msg = github_push_result.get('error', 'Unknown error')
-                            logger.error(f"[APPROVAL] ❌ Failed to push approved commit to GitHub: {error_msg}")
-                            if github_push_result.get('committed'):
-                                logger.warning(f"[APPROVAL] Changes were committed locally but not pushed")
+                        error_msg = github_push_result.get('error', 'Unknown error')
+                        logger.error(f"[APPROVAL] ❌ Failed to push existing commit to GitHub: {error_msg}")
                 else:
-                    error_msg = f"Failed to sync TODO-UI repo: {sync_result.get('error', 'Unknown error')}"
-                    logger.error(f"[APPROVAL] {error_msg}")
-                    github_push_result = {"status": "error", "error": error_msg}
+                    # Old flow: Need to sync files and create a new commit
+                    logger.info(f"[APPROVAL] Task {task_id} not yet committed, syncing files and creating commit")
+                    
+                    # Sync the TODO-UI repository first
+                    logger.info(f"[APPROVAL] Step 1: Cloning/pulling TODO-UI repository")
+                    sync_result = github_ops.clone_or_pull_repo()
+                    logger.info(f"[APPROVAL] Sync result: {sync_result}")
+                    
+                    if sync_result["status"] == "success":
+                        # Get task details for GitHub push
+                        modified_files = task.get("modified_files", [])
+                        logger.info(f"[APPROVAL] Step 2: Syncing {len(modified_files)} modified files to GitHub repo")
+                        logger.info(f"[APPROVAL] Modified files: {modified_files}")
+                        
+                        # Sync files from orchestrator/todo-ui to the GitHub repo
+                        from pathlib import Path
+                        source_base = Path("todo-ui")  # orchestrator/todo-ui
+                        file_sync_result = github_ops.sync_files_to_repo(modified_files, source_base)
+                        logger.info(f"[APPROVAL] File sync result: {file_sync_result}")
+                        
+                        if file_sync_result["status"] != "success":
+                            error_msg = f"File sync failed: {file_sync_result.get('error', 'Unknown error')}"
+                            logger.error(f"[APPROVAL] {error_msg}")
+                            logger.error(f"[APPROVAL] Failed files: {file_sync_result.get('failed_files', [])}")
+                            github_push_result = {"status": "error", "error": error_msg}
+                        else:
+                            logger.info(f"[APPROVAL] Successfully synced {file_sync_result['total_synced']} files to GitHub repo")
+                            logger.info(f"[APPROVAL] Synced files: {file_sync_result.get('synced_files', [])}")
+                            
+                            # Push the approved commit to GitHub
+                            logger.info(f"[APPROVAL] Step 3: Committing and pushing changes to GitHub")
+                            github_push_result = github_ops.commit_and_push_changes(
+                                task.get("title", f"Approved task {task_id}"),
+                                modified_files,
+                                {"suggestions": task.get("gemini_analysis", {"summary": "Approved commit", "risk_assessment": "low"})}
+                            )
+                            logger.info(f"[APPROVAL] GitHub push result: {github_push_result}")
+                            
+                            if github_push_result["status"] == "success":
+                                logger.info(f"[APPROVAL] ✅ Successfully pushed approved commit to GitHub: {github_push_result['commit_hash']}")
+                                task["github_pushed"] = True
+                                task["github_commit_info"] = {
+                                    "commit_hash": github_push_result["commit_hash"],
+                                    "commit_message": github_push_result["commit_message"],
+                                    "timestamp": github_push_result["timestamp"],
+                                    "pushed_at": datetime.now().isoformat()
+                                }
+                            else:
+                                error_msg = github_push_result.get('error', 'Unknown error')
+                                logger.error(f"[APPROVAL] ❌ Failed to push approved commit to GitHub: {error_msg}")
+                                if github_push_result.get('committed'):
+                                    logger.warning(f"[APPROVAL] Changes were committed locally but not pushed")
+                    else:
+                        error_msg = f"Failed to sync TODO-UI repo: {sync_result.get('error', 'Unknown error')}"
+                        logger.error(f"[APPROVAL] {error_msg}")
+                        github_push_result = {"status": "error", "error": error_msg}
             except Exception as e:
                 error_msg = f"Exception during GitHub push: {str(e)}"
                 logger.error(f"[APPROVAL] {error_msg}", exc_info=True)
