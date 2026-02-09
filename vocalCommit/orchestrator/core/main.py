@@ -1039,8 +1039,27 @@ async def process_task_in_background(task_id: str, approval_data: dict):
         else:
             logger.info(f"[COMMIT] Successfully synced todo-ui repo: {sync_result['action']}")
         
-        # Step 2: Get Gemini AI suggestions for the changes
-        logger.info(f"[COMMIT] Step 2: Getting AI analysis")
+        # Step 2: Sync modified files from working directory to git repository
+        if sync_result["status"] == "success":
+            logger.info(f"[COMMIT] Step 2: Syncing {len(modified_files)} modified files to git repository")
+            from pathlib import Path
+            source_base = Path("todo-ui")  # Working directory where Dev Agent made changes
+            
+            file_sync_result = github_ops.sync_files_to_repo(modified_files, source_base)
+            logger.info(f"[COMMIT] File sync result: {file_sync_result}")
+            
+            if file_sync_result["status"] != "success":
+                error_msg = f"File sync failed: {file_sync_result.get('error', 'Unknown error')}"
+                logger.error(f"[COMMIT] {error_msg}")
+                logger.error(f"[COMMIT] Failed files: {file_sync_result.get('failed_files', [])}")
+                task_data["commit_failed"] = True
+                task_data["commit_error"] = error_msg
+                sync_result["status"] = "error"  # Mark sync as failed
+            else:
+                logger.info(f"[COMMIT] Successfully synced {file_sync_result['total_synced']} files to git repository")
+        
+        # Step 3: Get Gemini AI suggestions for the changes
+        logger.info(f"[COMMIT] Step 3: Getting AI analysis")
         gemini_suggestions = github_ops.get_gemini_suggestions(
             approval_data["transcript"], 
             modified_files
@@ -1053,9 +1072,9 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             logger.warning(f"[COMMIT] Gemini AI analysis failed: {gemini_suggestions.get('error', 'Unknown error')}")
             task_data["gemini_analysis"] = gemini_suggestions.get("suggestions", {})
         
-        # Step 3: Commit changes locally (DO NOT PUSH YET)
+        # Step 4: Commit changes locally (DO NOT PUSH YET)
         if sync_result["status"] == "success":
-            logger.info(f"[COMMIT] Step 3: Committing changes locally (no push)")
+            logger.info(f"[COMMIT] Step 4: Committing changes locally (no push)")
             commit_result = github_ops.commit_changes_locally(
                 approval_data["transcript"],
                 modified_files,
