@@ -1029,16 +1029,11 @@ async def process_task_in_background(task_id: str, approval_data: dict):
         # NEW WORKFLOW: Commit locally immediately, then ask for approval before pushing
         logger.info(f"[COMMIT] Starting local commit workflow for task {task_id}")
         
-        # Step 1: Sync the todo-ui repository (pull existing changes)
-        logger.info(f"[COMMIT] Step 1: Syncing TODO-UI repository")
-        sync_result = github_ops.clone_or_pull_repo()
-        if sync_result["status"] != "success":
-            logger.error(f"[COMMIT] Failed to sync todo-ui repo: {sync_result.get('error', 'Unknown error')}")
-            task_data["github_sync_error"] = sync_result.get("error", "Unknown error")
-            task_data["commit_failed"] = True
-        else:
-            logger.info(f"[COMMIT] Successfully synced todo-ui repo: {sync_result['action']}")
-            logger.info(f"[COMMIT] Dev Agent already modified files in the git repository - no sync needed")
+        # Step 1: Skip sync - Dev Agent already modified files in the git repository
+        # Pulling remote changes after Dev Agent modifications can cause conflicts or overwrite changes
+        logger.info(f"[COMMIT] Step 1: Skipping sync - Dev Agent already modified files in the git repository")
+        logger.info(f"[COMMIT] Files were modified directly in the git repo, no pull needed before commit")
+        sync_result = {"status": "success", "action": "skipped", "message": "Dev Agent already modified files in git repo"}
         
         # Step 2: Get Gemini AI suggestions for the changes
         logger.info(f"[COMMIT] Step 2: Getting AI analysis")

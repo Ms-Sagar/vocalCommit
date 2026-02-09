@@ -357,22 +357,10 @@ class GitHubOperations:
             config_result = self._run_git_command(["config", "pull.rebase", "false"])
             logger.info(f"[LOCAL_COMMIT] Config result: {config_result}")
             
-            # Pull latest changes before committing
-            logger.info("[LOCAL_COMMIT] Step 2: Pulling latest changes from TODO-UI repository")
-            pull_result = self._run_git_command(["pull", "origin", "main", "--no-edit"])
-            logger.info(f"[LOCAL_COMMIT] Pull result (main): {pull_result}")
-            
-            if pull_result["status"] != "success":
-                # Try master branch if main fails
-                logger.info("[LOCAL_COMMIT] Main branch failed, trying master branch")
-                pull_result = self._run_git_command(["pull", "origin", "master", "--no-edit"])
-                logger.info(f"[LOCAL_COMMIT] Pull result (master): {pull_result}")
-            
-            if pull_result["status"] != "success":
-                logger.warning(f"[LOCAL_COMMIT] Failed to pull latest changes: {pull_result.get('stderr', 'Unknown error')}")
-                # Continue anyway, but log the warning
-            else:
-                logger.info("[LOCAL_COMMIT] ✅ Successfully pulled latest changes from TODO-UI repository")
+            # SKIP pulling before commit - Dev Agent already modified files in the git repository
+            # Pulling here can cause conflicts or overwrite the changes we just made
+            logger.info("[LOCAL_COMMIT] Step 2: Skipping pull - Dev Agent already modified files in git repo")
+            logger.info("[LOCAL_COMMIT] Files were modified directly in the git repository, no pull needed before commit")
             
             # Check if there are any changes to commit
             logger.info("[LOCAL_COMMIT] Step 3: Checking for changes to commit")
@@ -520,33 +508,21 @@ class GitHubOperations:
     
     def commit_and_push_changes(self, task_description: str, modified_files: List[str], 
                                gemini_suggestions: Dict[str, Any]) -> Dict[str, Any]:
-        """Commit changes and push to GitHub with Gemini analysis. Always pulls latest changes first."""
+        """Commit changes and push to GitHub with Gemini analysis. Skips pull to avoid overwriting Dev Agent changes."""
         try:
             logger.info(f"[GITHUB] Starting commit and push for: {task_description}")
             logger.info(f"[GITHUB] Working directory: {self.local_path}")
             logger.info(f"[GITHUB] Modified files count: {len(modified_files)}")
             
-            # CRITICAL: Configure git pull strategy first
+            # Configure git pull strategy
             logger.info("[GITHUB] Step 1: Configuring git pull strategy")
             config_result = self._run_git_command(["config", "pull.rebase", "false"])
             logger.info(f"[GITHUB] Config result: {config_result}")
             
-            # CRITICAL: Always pull latest changes before committing
-            logger.info("[GITHUB] Step 2: Pulling latest changes from TODO-UI repository")
-            pull_result = self._run_git_command(["pull", "origin", "main", "--no-edit"])
-            logger.info(f"[GITHUB] Pull result (main): {pull_result}")
-            
-            if pull_result["status"] != "success":
-                # Try master branch if main fails
-                logger.info("[GITHUB] Main branch failed, trying master branch")
-                pull_result = self._run_git_command(["pull", "origin", "master", "--no-edit"])
-                logger.info(f"[GITHUB] Pull result (master): {pull_result}")
-            
-            if pull_result["status"] != "success":
-                logger.warning(f"[GITHUB] Failed to pull latest changes: {pull_result.get('stderr', 'Unknown error')}")
-                # Continue anyway, but log the warning
-            else:
-                logger.info("[GITHUB] ✅ Successfully pulled latest changes from TODO-UI repository")
+            # SKIP pulling before commit - Dev Agent already modified files in the git repository
+            # Pulling here can cause conflicts or overwrite the changes we just made
+            logger.info("[GITHUB] Step 2: Skipping pull - Dev Agent already modified files in git repo")
+            logger.info("[GITHUB] Files were modified directly in the git repository, no pull needed before commit")
             
             # Check if there are any changes to commit
             logger.info("[GITHUB] Step 3: Checking for changes to commit")
