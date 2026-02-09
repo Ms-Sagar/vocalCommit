@@ -1026,19 +1026,34 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "type": "ui_editing"
         }
         
-        # NEW WORKFLOW: Commit locally immediately, then ask for approval before pushing
-        logger.info(f"[COMMIT] Starting local commit workflow for task {task_id}")
+        # NEW WORKFLOW: Remove directory, clone fresh, commit locally, then ask for approval before pushing
+        logger.info(f"[COMMIT] Starting fresh clone and commit workflow for task {task_id}")
         
-        # Step 1: Sync the todo-ui repository (pull existing changes)
-        logger.info(f"[COMMIT] Step 1: Syncing TODO-UI repository")
-        sync_result = github_ops.clone_or_pull_repo()
+        # Step 1: Remove existing directory and clone fresh repository
+        logger.info(f"[COMMIT] Step 1: Removing existing directory and cloning fresh TODO-UI repository")
+        sync_result = github_ops.remove_and_clone_fresh()
         if sync_result["status"] != "success":
-            logger.error(f"[COMMIT] Failed to sync todo-ui repo: {sync_result.get('error', 'Unknown error')}")
+            logger.error(f"[COMMIT] Failed to clone fresh todo-ui repo: {sync_result.get('error', 'Unknown error')}")
             task_data["github_sync_error"] = sync_result.get("error", "Unknown error")
             task_data["commit_failed"] = True
         else:
-            logger.info(f"[COMMIT] Successfully synced todo-ui repo: {sync_result['action']}")
-            logger.info(f"[COMMIT] Dev Agent already modified files in the git repository - no sync needed")
+            logger.info(f"[COMMIT] Successfully cloned fresh todo-ui repo: {sync_result['action']}")
+            
+            # Step 1.5: Sync modified files from orchestrator/todo-ui to the fresh clone
+            logger.info(f"[COMMIT] Step 1.5: Syncing {len(modified_files)} modified files to fresh clone")
+            from pathlib import Path
+            source_base = Path(__file__).parent.parent / "todo-ui"  # orchestrator/todo-ui
+            file_sync_result = github_ops.sync_files_to_repo(modified_files, source_base)
+            logger.info(f"[COMMIT] File sync result: {file_sync_result}")
+            
+            if file_sync_result["status"] != "success":
+                error_msg = f"File sync failed: {file_sync_result.get('error', 'Unknown error')}"
+                logger.error(f"[COMMIT] {error_msg}")
+                task_data["github_sync_error"] = error_msg
+                task_data["commit_failed"] = True
+                sync_result["status"] = "error"  # Mark sync as failed
+            else:
+                logger.info(f"[COMMIT] Successfully synced {file_sync_result['total_synced']} files to fresh clone")
         
         # Step 2: Get Gemini AI suggestions for the changes
         logger.info(f"[COMMIT] Step 2: Getting AI analysis")
@@ -1790,20 +1805,20 @@ async def approve_task_commit(task_id: str):
         if not task.get("github_pushed"):
             logger.info(f"[APPROVAL] Pushing approved commit to GitHub for task {task_id}")
             try:
-                # Sync the TODO-UI repository first
-                logger.info(f"[APPROVAL] Step 1: Cloning/pulling TODO-UI repository")
-                sync_result = github_ops.clone_or_pull_repo()
-                logger.info(f"[APPROVAL] Sync result: {sync_result}")
+                # Step 1: Remove existing directory and clone fresh
+                logger.info(f"[APPROVAL] Step 1: Removing existing directory and cloning fresh TODO-UI repository")
+                sync_result = github_ops.remove_and_clone_fresh()
+                logger.info(f"[APPROVAL] Fresh clone result: {sync_result}")
                 
                 if sync_result["status"] == "success":
                     # Get task details for GitHub push
                     modified_files = task.get("modified_files", [])
-                    logger.info(f"[APPROVAL] Step 2: Syncing {len(modified_files)} modified files to GitHub repo")
+                    logger.info(f"[APPROVAL] Step 2: Syncing {len(modified_files)} modified files to fresh clone")
                     logger.info(f"[APPROVAL] Modified files: {modified_files}")
                     
-                    # Sync files from orchestrator/todo-ui to the GitHub repo
+                    # Sync files from orchestrator/todo-ui to the fresh clone
                     from pathlib import Path
-                    source_base = Path("todo-ui")  # orchestrator/todo-ui
+                    source_base = Path(__file__).parent.parent / "todo-ui"  # orchestrator/todo-ui
                     file_sync_result = github_ops.sync_files_to_repo(modified_files, source_base)
                     logger.info(f"[APPROVAL] File sync result: {file_sync_result}")
                     
@@ -1813,7 +1828,7 @@ async def approve_task_commit(task_id: str):
                         logger.error(f"[APPROVAL] Failed files: {file_sync_result.get('failed_files', [])}")
                         github_push_result = {"status": "error", "error": error_msg}
                     else:
-                        logger.info(f"[APPROVAL] Successfully synced {file_sync_result['total_synced']} files to GitHub repo")
+                        logger.info(f"[APPROVAL] Successfully synced {file_sync_result['total_synced']} files to fresh clone")
                         logger.info(f"[APPROVAL] Synced files: {file_sync_result.get('synced_files', [])}")
                         
                         # Push the approved commit to GitHub
@@ -1840,7 +1855,7 @@ async def approve_task_commit(task_id: str):
                             if github_push_result.get('committed'):
                                 logger.warning(f"[APPROVAL] Changes were committed locally but not pushed")
                 else:
-                    error_msg = f"Failed to sync TODO-UI repo: {sync_result.get('error', 'Unknown error')}"
+                    error_msg = f"Failed to clone fresh TODO-UI repo: {sync_result.get('error', 'Unknown error')}"
                     logger.error(f"[APPROVAL] {error_msg}")
                     github_push_result = {"status": "error", "error": error_msg}
             except Exception as e:

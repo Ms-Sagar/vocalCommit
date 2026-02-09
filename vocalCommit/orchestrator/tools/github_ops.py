@@ -115,6 +115,100 @@ class GitHubOperations:
                 "error": str(e)
             }
     
+    def remove_and_clone_fresh(self) -> Dict[str, Any]:
+        """Remove existing directory and clone fresh repository. Used for every new request."""
+        try:
+            # Step 1: Remove existing directory if it exists
+            if self.local_path.exists():
+                logger.info(f"[FRESH_CLONE] Removing existing directory: {self.local_path}")
+                try:
+                    # Try multiple times with different strategies
+                    import time
+                    max_attempts = 3
+                    
+                    for attempt in range(max_attempts):
+                        try:
+                            # First attempt: normal removal
+                            if attempt == 0:
+                                shutil.rmtree(self.local_path)
+                                logger.info(f"[FRESH_CLONE] ✅ Successfully removed existing directory")
+                                break
+                            # Second attempt: force removal with onerror handler
+                            elif attempt == 1:
+                                def handle_remove_error(func, path, exc_info):
+                                    """Error handler for shutil.rmtree"""
+                                    import stat
+                                    # Try to change permissions and retry
+                                    os.chmod(path, stat.S_IWRITE)
+                                    func(path)
+                                
+                                shutil.rmtree(self.local_path, onerror=handle_remove_error)
+                                logger.info(f"[FRESH_CLONE] ✅ Successfully removed existing directory (with permission fix)")
+                                break
+                            # Third attempt: use subprocess rm -rf
+                            else:
+                                import subprocess
+                                result = subprocess.run(
+                                    ["rm", "-rf", str(self.local_path)],
+                                    capture_output=True,
+                                    text=True
+                                )
+                                if result.returncode == 0:
+                                    logger.info(f"[FRESH_CLONE] ✅ Successfully removed existing directory (with rm -rf)")
+                                    break
+                                else:
+                                    raise Exception(f"rm -rf failed: {result.stderr}")
+                        except Exception as e:
+                            if attempt < max_attempts - 1:
+                                logger.warning(f"[FRESH_CLONE] Attempt {attempt + 1} failed: {e}, retrying...")
+                                time.sleep(1)  # Wait before retry
+                            else:
+                                raise
+                    
+                except Exception as rm_error:
+                    logger.error(f"[FRESH_CLONE] Failed to remove directory: {rm_error}")
+                    return {
+                        "status": "error",
+                        "error": f"Failed to remove existing directory: {rm_error}"
+                    }
+            else:
+                logger.info(f"[FRESH_CLONE] No existing directory found at {self.local_path}")
+            
+            # Step 2: Clone fresh repository
+            logger.info(f"[FRESH_CLONE] Cloning fresh repository to {self.local_path}")
+            
+            # Create parent directory if needed
+            self.local_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Clone with authentication
+            auth_url = self.repo_url.replace("https://", f"https://{self.token}@")
+            
+            clone_result = self._run_git_command([
+                "clone", auth_url, str(self.local_path)
+            ], cwd=self.local_path.parent)
+            
+            if clone_result["status"] != "success":
+                return {
+                    "status": "error",
+                    "error": f"Failed to clone repository: {clone_result.get('stderr', 'Unknown error')}",
+                    "git_output": clone_result
+                }
+            
+            logger.info("[FRESH_CLONE] ✅ Successfully cloned fresh repository")
+            return {
+                "status": "success",
+                "action": "fresh_clone",
+                "message": "Repository cloned fresh (removed old directory)",
+                "git_output": clone_result
+            }
+                
+        except Exception as e:
+            logger.error(f"[FRESH_CLONE] Error in remove_and_clone_fresh: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+    
     def clone_or_pull_repo(self) -> Dict[str, Any]:
         """Clone the repository if it doesn't exist, or pull latest changes."""
         try:
@@ -324,33 +418,42 @@ class GitHubOperations:
     
     def commit_changes_locally(self, task_description: str, modified_files: List[str], 
                                gemini_suggestions: Dict[str, Any]) -> Dict[str, Any]:
-        """Commit changes locally without pushing. Used for approval workflow."""
+        """Commit changes locally without pushing. Always removes directory and clones fresh. Used for approval workflow."""
         try:
-            logger.info(f"[LOCAL_COMMIT] Starting local commit for: {task_description}")
-            logger.info(f"[LOCAL_COMMIT] Working directory: {self.local_path}")
+            logger.info(f"[LOCAL_COMMIT] Starting fresh clone and local commit for: {task_description}")
             logger.info(f"[LOCAL_COMMIT] Modified files count: {len(modified_files)}")
             
-            # Configure git pull strategy
-            logger.info("[LOCAL_COMMIT] Step 1: Configuring git pull strategy")
-            config_result = self._run_git_command(["config", "pull.rebase", "false"])
-            logger.info(f"[LOCAL_COMMIT] Config result: {config_result}")
+            # CRITICAL: Remove existing directory and clone fresh
+            logger.info("[LOCAL_COMMIT] Step 1: Removing existing directory and cloning fresh repository")
+            fresh_clone_result = self.remove_and_clone_fresh()
+            logger.info(f"[LOCAL_COMMIT] Fresh clone result: {fresh_clone_result}")
             
-            # Pull latest changes before committing
-            logger.info("[LOCAL_COMMIT] Step 2: Pulling latest changes from TODO-UI repository")
-            pull_result = self._run_git_command(["pull", "origin", "main", "--no-edit"])
-            logger.info(f"[LOCAL_COMMIT] Pull result (main): {pull_result}")
+            if fresh_clone_result["status"] != "success":
+                error_msg = f"Failed to clone fresh repository: {fresh_clone_result.get('error', 'Unknown error')}"
+                logger.error(f"[LOCAL_COMMIT] {error_msg}")
+                return {
+                    "status": "error",
+                    "error": error_msg
+                }
             
-            if pull_result["status"] != "success":
-                # Try master branch if main fails
-                logger.info("[LOCAL_COMMIT] Main branch failed, trying master branch")
-                pull_result = self._run_git_command(["pull", "origin", "master", "--no-edit"])
-                logger.info(f"[LOCAL_COMMIT] Pull result (master): {pull_result}")
+            logger.info("[LOCAL_COMMIT] ✅ Successfully cloned fresh repository")
             
-            if pull_result["status"] != "success":
-                logger.warning(f"[LOCAL_COMMIT] Failed to pull latest changes: {pull_result.get('stderr', 'Unknown error')}")
-                # Continue anyway, but log the warning
-            else:
-                logger.info("[LOCAL_COMMIT] ✅ Successfully pulled latest changes from TODO-UI repository")
+            # Step 2: Sync modified files from source to the fresh clone
+            logger.info("[LOCAL_COMMIT] Step 2: Syncing modified files to fresh clone")
+            from pathlib import Path
+            source_base = Path(__file__).parent.parent / "todo-ui"  # orchestrator/todo-ui
+            file_sync_result = self.sync_files_to_repo(modified_files, source_base)
+            logger.info(f"[LOCAL_COMMIT] File sync result: {file_sync_result}")
+            
+            if file_sync_result["status"] != "success":
+                error_msg = f"File sync failed: {file_sync_result.get('error', 'Unknown error')}"
+                logger.error(f"[LOCAL_COMMIT] {error_msg}")
+                return {
+                    "status": "error",
+                    "error": error_msg
+                }
+            
+            logger.info(f"[LOCAL_COMMIT] ✅ Successfully synced {file_sync_result['total_synced']} files to fresh clone")
             
             # Check if there are any changes to commit
             logger.info("[LOCAL_COMMIT] Step 3: Checking for changes to commit")
@@ -483,33 +586,42 @@ class GitHubOperations:
     
     def commit_and_push_changes(self, task_description: str, modified_files: List[str], 
                                gemini_suggestions: Dict[str, Any]) -> Dict[str, Any]:
-        """Commit changes and push to GitHub with Gemini analysis. Always pulls latest changes first."""
+        """Commit changes and push to GitHub with Gemini analysis. Always removes directory and clones fresh."""
         try:
-            logger.info(f"[GITHUB] Starting commit and push for: {task_description}")
-            logger.info(f"[GITHUB] Working directory: {self.local_path}")
+            logger.info(f"[GITHUB] Starting fresh clone, commit and push for: {task_description}")
             logger.info(f"[GITHUB] Modified files count: {len(modified_files)}")
             
-            # CRITICAL: Configure git pull strategy first
-            logger.info("[GITHUB] Step 1: Configuring git pull strategy")
-            config_result = self._run_git_command(["config", "pull.rebase", "false"])
-            logger.info(f"[GITHUB] Config result: {config_result}")
+            # CRITICAL: Remove existing directory and clone fresh
+            logger.info("[GITHUB] Step 1: Removing existing directory and cloning fresh repository")
+            fresh_clone_result = self.remove_and_clone_fresh()
+            logger.info(f"[GITHUB] Fresh clone result: {fresh_clone_result}")
             
-            # CRITICAL: Always pull latest changes before committing
-            logger.info("[GITHUB] Step 2: Pulling latest changes from TODO-UI repository")
-            pull_result = self._run_git_command(["pull", "origin", "main", "--no-edit"])
-            logger.info(f"[GITHUB] Pull result (main): {pull_result}")
+            if fresh_clone_result["status"] != "success":
+                error_msg = f"Failed to clone fresh repository: {fresh_clone_result.get('error', 'Unknown error')}"
+                logger.error(f"[GITHUB] {error_msg}")
+                return {
+                    "status": "error",
+                    "error": error_msg
+                }
             
-            if pull_result["status"] != "success":
-                # Try master branch if main fails
-                logger.info("[GITHUB] Main branch failed, trying master branch")
-                pull_result = self._run_git_command(["pull", "origin", "master", "--no-edit"])
-                logger.info(f"[GITHUB] Pull result (master): {pull_result}")
+            logger.info("[GITHUB] ✅ Successfully cloned fresh repository")
             
-            if pull_result["status"] != "success":
-                logger.warning(f"[GITHUB] Failed to pull latest changes: {pull_result.get('stderr', 'Unknown error')}")
-                # Continue anyway, but log the warning
-            else:
-                logger.info("[GITHUB] ✅ Successfully pulled latest changes from TODO-UI repository")
+            # Step 2: Sync modified files from source to the fresh clone
+            logger.info("[GITHUB] Step 2: Syncing modified files to fresh clone")
+            from pathlib import Path
+            source_base = Path(__file__).parent.parent / "todo-ui"  # orchestrator/todo-ui
+            file_sync_result = self.sync_files_to_repo(modified_files, source_base)
+            logger.info(f"[GITHUB] File sync result: {file_sync_result}")
+            
+            if file_sync_result["status"] != "success":
+                error_msg = f"File sync failed: {file_sync_result.get('error', 'Unknown error')}"
+                logger.error(f"[GITHUB] {error_msg}")
+                return {
+                    "status": "error",
+                    "error": error_msg
+                }
+            
+            logger.info(f"[GITHUB] ✅ Successfully synced {file_sync_result['total_synced']} files to fresh clone")
             
             # Check if there are any changes to commit
             logger.info("[GITHUB] Step 3: Checking for changes to commit")
