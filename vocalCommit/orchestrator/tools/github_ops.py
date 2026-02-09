@@ -330,6 +330,28 @@ class GitHubOperations:
             logger.info(f"[LOCAL_COMMIT] Working directory: {self.local_path}")
             logger.info(f"[LOCAL_COMMIT] Modified files count: {len(modified_files)}")
             
+            # Check if there's already a commit with this exact message (prevent duplicates)
+            logger.info("[LOCAL_COMMIT] Step 0: Checking for duplicate commits")
+            last_commit_result = self._run_git_command(["log", "-1", "--pretty=format:%s"])
+            if last_commit_result["status"] == "success":
+                last_commit_msg = last_commit_result["stdout"]
+                if task_description in last_commit_msg:
+                    logger.warning(f"[LOCAL_COMMIT] Duplicate commit detected - last commit already contains this task")
+                    hash_result = self._run_git_command(["rev-parse", "HEAD"])
+                    commit_hash = hash_result["stdout"][:8] if hash_result["status"] == "success" else "unknown"
+                    return {
+                        "status": "success",
+                        "commit_hash": commit_hash,
+                        "commit_message": last_commit_msg,
+                        "modified_files": modified_files,
+                        "gemini_suggestions": gemini_suggestions,
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "committed": True,
+                        "pushed": False,
+                        "awaiting_approval": True,
+                        "duplicate_prevented": True
+                    }
+            
             # Configure git pull strategy
             logger.info("[LOCAL_COMMIT] Step 1: Configuring git pull strategy")
             config_result = self._run_git_command(["config", "pull.rebase", "false"])
@@ -446,9 +468,24 @@ class GitHubOperations:
             logger.info("[PUSH] Pushing committed changes to remote repository")
             logger.info(f"[PUSH] Working directory: {self.local_path}")
             
-            # Push to origin
-            logger.info("[PUSH] Executing git push")
-            push_result = self._run_git_command(["push", "origin", "HEAD"])
+            # Get current branch name
+            branch_result = self._run_git_command(["branch", "--show-current"])
+            current_branch = branch_result["stdout"] if branch_result["status"] == "success" else "main"
+            logger.info(f"[PUSH] Current branch: {current_branch}")
+            
+            # Check if there are commits to push
+            status_result = self._run_git_command(["status", "-sb"])
+            logger.info(f"[PUSH] Branch status: {status_result.get('stdout', 'unknown')}")
+            
+            # Pull latest changes first to avoid conflicts
+            logger.info("[PUSH] Pulling latest changes before push")
+            pull_result = self._run_git_command(["pull", "origin", current_branch, "--no-edit"])
+            if pull_result["status"] != "success":
+                logger.warning(f"[PUSH] Pull failed (continuing anyway): {pull_result.get('stderr', 'Unknown error')}")
+            
+            # Push to origin using explicit branch name
+            logger.info(f"[PUSH] Executing git push origin {current_branch}")
+            push_result = self._run_git_command(["push", "origin", current_branch])
             logger.info(f"[PUSH] Push result: {push_result}")
             
             if push_result["status"] != "success":
