@@ -1082,8 +1082,10 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             logger.error(f"[COMMIT] Skipping commit due to sync failure")
             task_data["commit_failed"] = True
         
-        logger.info(f"[COMMIT] Task {task_id} committed locally, awaiting approval to push to remote")
+        logger.info(f"[COMMIT] Commit process completed for task {task_id}")
+        logger.info(f"[COMMIT] Task status - awaiting_push_approval: {task_data.get('awaiting_push_approval', False)}, commit_failed: {task_data.get('commit_failed', False)}")
         
+        # CRITICAL: Add to completed_tasks AFTER commit is done
         completed_tasks[task_id] = task_data
         
         # Move from active to completed state
@@ -1101,6 +1103,10 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             del workflow_states["active"][task_id]
         
         logger.info(f"Background processing completed successfully for task {task_id}")
+        
+        # CRITICAL: Send completion notification ONLY AFTER commit is complete
+        logger.info(f"[WEBSOCKET] Preparing completion notification for task {task_id}")
+        logger.info(f"[WEBSOCKET] Commit status - has_commit: {task_data.get('has_commit', False)}, awaiting_push_approval: {task_data.get('awaiting_push_approval', False)}")
         
         # Send completion notification via WebSocket to connected clients
         github_info_msg = ""
@@ -1129,6 +1135,9 @@ async def process_task_in_background(task_id: str, approval_data: dict):
             "pending_github_push": task_data.get("pending_github_push", False),
             "message": f"🎉 **Task Completed!**\n\n**{approval_data['transcript']}**\n\n📁 Modified {len(modified_files)} files\n🌐 View changes at http://localhost:5174{github_info_msg}"
         }
+        
+        logger.info(f"[WEBSOCKET] Sending completion message to {len(manager.active_connections)} clients")
+        logger.info(f"[WEBSOCKET] Message includes commit_info: {task_data.get('commit_info', {}).get('commit_hash', 'NO COMMIT')}")
         
         # Broadcast to all connected WebSocket clients
         for connection in manager.active_connections:
