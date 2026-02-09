@@ -3,6 +3,7 @@ import subprocess
 import logging
 import json
 import requests
+import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -118,16 +119,53 @@ class GitHubOperations:
         """Clone the repository if it doesn't exist, or pull latest changes."""
         try:
             if self.local_path.exists():
-                logger.info(f"Repository exists at {self.local_path}, pulling latest changes")
+                logger.info(f"Repository exists at {self.local_path}, checking if it's a git repository")
                 
                 # Check if it's a git repository
                 if not (self.local_path / ".git").exists():
+                    logger.warning(f"Directory {self.local_path} exists but is not a git repository - removing and cloning fresh")
+                    
+                    # Remove the non-git directory
+                    try:
+                        shutil.rmtree(self.local_path)
+                        logger.info(f"Removed non-git directory: {self.local_path}")
+                    except Exception as rm_error:
+                        logger.error(f"Failed to remove directory: {rm_error}")
+                        return {
+                            "status": "error",
+                            "error": f"Directory exists but is not a git repository and cannot be removed: {rm_error}"
+                        }
+                    
+                    # Now clone fresh
+                    logger.info(f"Cloning repository to {self.local_path}")
+                    
+                    # Create parent directory if needed
+                    self.local_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Clone with authentication
+                    auth_url = self.repo_url.replace("https://", f"https://{self.token}@")
+                    
+                    clone_result = self._run_git_command([
+                        "clone", auth_url, str(self.local_path)
+                    ], cwd=self.local_path.parent)
+                    
+                    if clone_result["status"] != "success":
+                        return {
+                            "status": "error",
+                            "error": f"Failed to clone repository: {clone_result.get('stderr', 'Unknown error')}",
+                            "git_output": clone_result
+                        }
+                    
+                    logger.info("Successfully cloned repository after removing non-git directory")
                     return {
-                        "status": "error",
-                        "error": f"Directory {self.local_path} exists but is not a git repository"
+                        "status": "success",
+                        "action": "cloned",
+                        "message": "Repository cloned successfully (replaced non-git directory)",
+                        "git_output": clone_result
                     }
                 
-                # Pull latest changes
+                # It's a valid git repository, pull latest changes
+                logger.info(f"Valid git repository found, pulling latest changes")
                 pull_result = self._run_git_command(["pull", "origin", "main"])
                 
                 if pull_result["status"] != "success":
