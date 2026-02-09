@@ -172,6 +172,7 @@ const TodoItem: React.FC<TodoItemProps> = ({
           onClick={() => onDelete(todo.id)}
           className="todo-item-action-btn delete-btn"
           aria-label={`Delete ${todo.title}`}
+          style={{ backgroundColor: 'purple', color: 'white' }} // Changed delete button color to purple
         >
           Delete
         </button>

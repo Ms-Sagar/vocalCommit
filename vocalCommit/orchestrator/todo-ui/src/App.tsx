@@ -230,6 +230,7 @@ const TodoCard: React.FC<TodoCardProps> = ({ todo, isBusy, toggleTodoStatus, del
           onClick={() => deleteTodo(todo.id)}
           disabled={isBusy}
           aria-label={`Delete todo "${todo.title}"`}
+          style={{ backgroundColor: 'purple', color: 'white' }}
         >
           {isBusy ? (
             <Spinner size="1em" />
