@@ -96,10 +96,10 @@
   --status-completed-color: var(--color-success-accent);
   --status-in-progress-color: var(--color-warning-accent);
 
-  /* Add New Todo Button Specific Green Colors */
-  --color-add-todo-btn-start: var(--color-primary-gradient-start);
-  --color-add-todo-btn-end: var(--color-primary-gradient-end);
-  --shadow-add-todo-btn-hover: var(--shadow-btn-hover-success);
+  /* Add New Todo Button Specific Red Colors */
+  --color-add-todo-btn-start: var(--color-danger-accent); /* Changed to red */
+  --color-add-todo-btn-end: #b02a37; /* Slightly darker red for gradient end */
+  --shadow-add-todo-btn-hover: 0 4px 12px rgba(220, 53, 69, 0.3); /* Red-based shadow */
 }
 
 /* Apply theme background and default text color to body */
