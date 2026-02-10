@@ -3,7 +3,7 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light; /* Allows browser to render native UI elements in light mode only */
+  /* color-scheme should be dynamic based on the theme, remove fixed light value from here */
 
   /* Global theme colors, using CSS variables defined in App.css */
   /* Fallbacks provided for initial load or if variables are not yet defined */
@@ -17,6 +17,15 @@
   -webkit-text-size-adjust: 100%;
 }
 
+/* Dynamically set color-scheme based on data-theme attribute on document.documentElement */
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -27,6 +36,8 @@ body {
   min-height: 100vh;
   /* Use app background variable for consistency */
   background-color: var(--bg-app, #f8f9fa); /* Default app background, light mode */
+  color: var(--text-primary, #495057); /* Apply default text color to body based on theme */
+  transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition for theme changes */
 }
 
 #root {
@@ -39,6 +50,7 @@ a {
   /* Use primary color variable for links */
   color: var(--color-primary, #007bff);
   text-decoration: inherit;
+  transition: color 0.25s ease;
 }
 a:hover {
   /* Use primary hover color variable for links */
@@ -60,7 +72,9 @@ button {
   font-family: inherit;
   /* Use primary color variable for button background */
   background-color: var(--color-primary, #007bff);
-  /* Use light text color for text on primary colored buttons */
+  /* Use light text color for text on primary colored buttons.
+     --text-light is defined in App.css for both themes,
+     so it should automatically pick the correct contrast. */
   color: var(--text-light, white);
   cursor: pointer;
   transition: all 0.25s ease;
@@ -78,4 +92,41 @@ button:focus-visible {
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/*
+  Styles for the theme toggle button:
+  Override the general button styles to make it distinct,
+  matching a more neutral UI for a toggle/icon button.
+  This ensures it doesn't look like a primary action button.
+*/
+.theme-toggle-button {
+  /* Reset default button styles */
+  background: none;
+  border: none;
+  padding: 0.5em; /* Smaller padding for icon button */
+  font-size: 1.5em; /* Adjust font size for icon appearance (e.g., if using an SVG icon or emoji) */
+  color: var(--text-secondary, #6c757d); /* A more neutral color for the icon, using theme variable */
+  cursor: pointer;
+  border-radius: 50%; /* Make it round */
+  width: 2.5em; /* Fixed size for round button */
+  height: 2.5em; /* Fixed size for round button */
+  display: flex; /* For centering content (icon) */
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease; /* Keep transition for smooth changes */
+  box-shadow: none; /* Ensure no unwanted shadow */
+  line-height: 1; /* Adjust line-height for icon buttons */
+}
+
+.theme-toggle-button:hover {
+  background-color: var(--bg-light-hover, #e9ecef); /* Subtle hover background, using theme variable */
+  color: var(--text-primary, #495057); /* Slightly darker text/icon on hover, using theme variable */
+}
+
+.theme-toggle-button:focus,
+.theme-toggle-button:focus-visible {
+  outline: 2px solid var(--color-primary, #007bff); /* Use primary color for focus outline, using theme variable */
+  outline-offset: 2px;
+  background-color: var(--bg-light-hover, #e9ecef); /* Keep hover background on focus */
 }

@@ -38,15 +38,26 @@ class GitHubOperations:
         logger.info(f"Local repository path: {self.local_path}")
     
     def _run_git_command(self, command: List[str], cwd: Optional[Path] = None) -> Dict[str, Any]:
-        """Execute a git command safely."""
+        """Execute a git command safely, isolated to the todo-ui repository."""
         try:
             work_dir = cwd or self.local_path
+            
+            # Ensure we're working within the todo-ui git repository only
+            # by explicitly setting GIT_DIR and GIT_WORK_TREE environment variables
+            env = os.environ.copy()
+            git_dir = work_dir / ".git"
+            
+            if git_dir.exists():
+                env['GIT_DIR'] = str(git_dir)
+                env['GIT_WORK_TREE'] = str(work_dir)
+            
             result = subprocess.run(
                 ["git"] + command,
                 cwd=work_dir,
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
+                env=env
             )
             
             return {
@@ -374,9 +385,17 @@ class GitHubOperations:
                     "message": "No changes to commit"
                 }
             
-            # Add all changes
+            # Add all changes - git is now isolated to todo-ui repository via GIT_DIR/GIT_WORK_TREE
             logger.info("[LOCAL_COMMIT] Step 4: Staging all changes")
-            add_result = self._run_git_command(["add", "."])
+            
+            # Verify we're in the todo-ui git repository
+            git_dir_check = self._run_git_command(["rev-parse", "--show-toplevel"])
+            if git_dir_check["status"] == "success":
+                git_root = git_dir_check["stdout"]
+                logger.info(f"[LOCAL_COMMIT] Git repository root: {git_root}")
+            
+            # Add all changes - parent .gitignore won't interfere due to GIT_DIR/GIT_WORK_TREE env vars
+            add_result = self._run_git_command(["add", "--all"])
             logger.info(f"[LOCAL_COMMIT] Add result: {add_result}")
             
             if add_result["status"] != "success":

@@ -19,7 +19,7 @@ const ThemeToggle: React.FC = () => {
           height="24"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="currentColor"
+          stroke="var(--text-secondary)" // Changed icon stroke color to use a theme-aware CSS variable
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -35,7 +35,7 @@ const ThemeToggle: React.FC = () => {
           height="24"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="currentColor"
+          stroke="var(--text-secondary)" // Changed icon stroke color to use a theme-aware CSS variable
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"

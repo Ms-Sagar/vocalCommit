@@ -289,8 +289,6 @@ body {
   transform: none; /* Disable transform when disabled */
 }
 
-/* Theme toggle button styles removed */
-
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -686,6 +684,35 @@ body {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* Theme Toggle Button (Re-introduced) */
+.theme-toggle-button {
+  background: var(--refresh-btn-bg); /* Use same background as refresh button */
+  color: var(--text-light); /* Icon color */
+  border: 1px solid var(--border-header-btn);
+  width: 44px; /* Fixed width for a square button */
+  height: 44px; /* Fixed height for a square button */
+  padding: 0;
+  border-radius: 8px;
+  cursor: pointer; /* As per request "change cour" (cursor) */
+  font-size: 1.25rem; /* Icon size */
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.theme-toggle-button:hover:not(:disabled) {
+  background: var(--refresh-btn-hover-bg); /* Use same hover background */
+  transform: scale(1.05); /* Consistent hover effect */
+}
+
+.theme-toggle-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* Polling Status */

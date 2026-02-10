@@ -499,6 +499,13 @@ function App() {
             onClick={() => fetchTodos(true)}
             isLoading={isLoadingTodos || activeCrudOperations.current.size > 0}
           />
+          {/* 
+            The ThemeToggle component is self-contained and manages its own styling 
+            via CSS classes and context-based theming (light/dark mode). 
+            Changing its color directly from App.tsx via inline styles is not possible
+            without modifying the ThemeToggle component itself or its associated CSS.
+            The current setup ensures it adapts correctly to the selected theme.
+          */}
           <ThemeToggle /> {/* Added ThemeToggle for dark mode */}
         </div>
       </header>

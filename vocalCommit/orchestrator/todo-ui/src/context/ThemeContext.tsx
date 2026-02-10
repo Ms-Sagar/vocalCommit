@@ -21,8 +21,12 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       if (savedTheme === 'light' || savedTheme === 'dark') {
         return savedTheme;
       }
+      // Check for user's system preference if no theme is saved
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      }
     }
-    return 'light'; // Default to light theme
+    return 'light'; // Default to light theme if no preference found or in SSR
   };
 
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
